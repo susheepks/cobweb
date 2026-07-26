@@ -1,0 +1,16 @@
+.vscode/**
+.github/**
+src/**
+node_modules/**
+out/**
+out-integration/**
+.vscode-test/**
+**/*.map
+**/tsconfig.json
+**/esbuild.js
+**/.eslintrc*
+**/.mocharc*
+**/*.ts
+media/icon-source.svg
+!dist/extension.js
+.gitignore

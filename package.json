@@ -1,0 +1,113 @@
+{
+  "name": "cobweb",
+  "displayName": "Cobweb — Git-Based Dead Code Detector",
+  "description": "Flags functions that are likely dead or stale using git history and static reference analysis. No servers, no telemetry, 100% local.",
+  "version": "0.2.0",
+  "publisher": "susheepks",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "dead code",
+    "git",
+    "refactoring",
+    "static analysis",
+    "codelens"
+  ],
+  "activationEvents": [
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascript",
+    "onLanguage:javascriptreact"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cobweb.refresh",
+        "title": "Cobweb: Refresh Analysis"
+      },
+      {
+        "command": "cobweb.showDetails",
+        "title": "Cobweb: Show Details for Symbol"
+      }
+    ],
+    "configuration": {
+      "title": "Cobweb",
+      "properties": {
+        "cobweb.staleAfterDays": {
+          "type": "number",
+          "default": 180,
+          "description": "Number of days since last git change before a symbol is considered 'stale' if it also has zero internal references."
+        },
+        "cobweb.ignoreGlobs": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/*.test.*",
+            "**/*.spec.*"
+          ],
+          "description": "Glob patterns to exclude from analysis."
+        },
+        "cobweb.respectExports": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, exported symbols are treated as 'possibly used externally' and shown with lower severity instead of flagged as dead."
+        },
+        "cobweb.maxFilesPerScan": {
+          "type": "number",
+          "default": 2000,
+          "description": "Safety cap on number of files analyzed per workspace scan, to avoid pathological performance on huge monorepos."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./ && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package",
+    "publish:marketplace": "vsce publish",
+    "publish:openvsx": "ovsx publish",
+    "test": "mocha",
+    "pretest:integration": "tsc -p ./ --outDir out-integration",
+    "test:integration": "node ./out-integration/test-integration/runTests.js",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^2.24.0",
+    "chai": "^4.5.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.56.0",
+    "glob": "^10.5.0",
+    "mocha": "^10.8.2",
+    "ovsx": "^0.9.1",
+    "sharp": "^0.35.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "lru-cache": "^10.4.3",
+    "minimatch": "^9.0.3",
+    "p-limit": "^4.0.0",
+    "simple-git": "^3.22.0",
+    "ts-morph": "^21.0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/susheepks/cobweb"
+  },
+  "license": "MIT",
+  "icon": "media/icon.png"
+}
