@@ -78,7 +78,11 @@ export class CobwebProvider implements vscode.CodeLensProvider {
 
     if (token.isCancellationRequested) return [];
 
-    const zeroRefCandidates = candidates.filter((c) => c.referenceCountInProject === 0);
+    // -1 means findReferencesAsNodes() threw (e.g. complex JSX / ts-morph parse edge case).
+    // Treat as "refs unknown" — still surface the git history signal rather than hiding silently.
+    const zeroRefCandidates = candidates.filter(
+      (c) => c.referenceCountInProject === 0 || c.referenceCountInProject === -1
+    );
     if (zeroRefCandidates.length === 0) return [];
 
     const lenses: vscode.CodeLens[] = [];
@@ -106,10 +110,17 @@ export class CobwebProvider implements vscode.CodeLensProvider {
       const isStale =
         history.daysSinceLastModified !== null && history.daysSinceLastModified >= staleAfterDays;
 
-      const refLabel = isAstLanguage ? 'no internal callers' : '0 in-file refs';
+      const refLabel =
+        candidate.referenceCountInProject === -1
+          ? 'refs unknown'
+          : isAstLanguage
+          ? 'no internal callers'
+          : '0 in-file refs';
       const severityLabel =
         candidate.isExported && respectExports
           ? `📦 Exported, ${refLabel}`
+          : candidate.referenceCountInProject === -1
+          ? `❓ ${refLabel}`
           : '⚠️ Possibly dead code';
 
       const dateInfo = history.lastModifiedISO

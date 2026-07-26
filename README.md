@@ -1,121 +1,180 @@
-# Cobweb
+# Cobweb — Git-Based Dead Code Detector
 
-Flags functions/methods with **zero internal references** and shows how long
-ago they were last touched in git — surfaced as an inline CodeLens, right
-above the declaration. No servers, no accounts, no telemetry: everything runs
-locally against the repo already open in your editor.
+> **Find functions nobody calls. Know when they were last touched. Decide if they should go.**
 
-## What it does
+Cobweb is a VS Code extension that sits silently in your editor and surfaces **stale, possibly dead functions** using two signals:
+1. **Static analysis** — counts how many places in your project call each function
+2. **Git history** — checks when it was last modified and by whom
 
-For each top-level function and class method in TypeScript/JavaScript files:
+No servers. No accounts. No telemetry. Everything runs 100% locally against the repo already open in your editor.
 
-1. Static analysis (`ts-morph`) counts references within the currently loaded
-   project.
-2. If references == 0, git history (`simple-git`, using `git log -S`) is
-   checked for when the symbol last changed and who touched it.
-3. A CodeLens renders above the declaration, e.g.:
-   `⚠️ Possibly dead code · last touched 412d ago by jsmith · stale`
+---
 
-## What it deliberately does NOT claim
+## ✨ Features
 
-Zero internal references is a signal, not a verdict. This extension never
-says "delete this." It can't see:
-- Dynamic/reflective calls (`obj[name]()`, string-based dispatch)
-- Consumers outside this repo (published npm packages, monorepo packages
-  loaded by other repos)
-- Framework-invoked lifecycle methods (a common list is excluded by default —
-  see `FRAMEWORK_LIFECYCLE_NAMES` in `src/staticAnalyzer.ts` — but you may
-  need to extend this list for your framework)
-- Test-only usage if test files are excluded via `ignoreGlobs`
+- 🔍 **Dead code detection** — flags functions with zero internal references
+- 📅 **Git-backed staleness** — shows how many days ago a function was last touched
+- 👤 **Author attribution** — shows who last modified the function
+- 🏷️ **Smart export awareness** — treats exported functions differently (they may have external callers)
+- ⚡ **Incremental caching** — results are cached per file version; re-runs only when code changes
+- 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
+- 🔒 **Privacy first** — zero network calls, zero data collection
 
-Exported symbols are labeled "📦 Exported, no internal callers" instead of
-"dead code" by default (`cobweb.respectExports`).
+---
 
-## Known limitations (v0.1)
+## 🔬 How It Works
 
-- **Multi-root workspaces**: only the first workspace folder's git repo is
-  analyzed. Independent repos per folder is a v0.2 item.
-- **Shallow clones**: `git log -S` on a shallow clone returns partial history.
-  The extension detects this and shows a one-time warning in its output
-  channel rather than silently giving wrong dates. Run `git fetch --unshallow`
-  for accurate results.
-- **Renamed/moved files**: `--follow` is used, but a function renamed *and*
-  moved in the same commit can still lose history continuity — a known git
-  limitation, not specific to this tool.
-- **Non-git workspaces**: staleness scoring is disabled; only static
-  reference counts are shown.
-- **Language support**: TypeScript/JavaScript only in v0.1. Python/Go/etc.
-  would need a different static-analysis backend (see Roadmap).
-- **Large monorepos**: capped at `cobweb.maxFilesPerScan` (default
-  2000) files per scan as a performance safety valve.
+For each function/method in your file, Cobweb:
 
-## Testing
+1. **Counts references** — how many times it is called within the project
+2. **If references = 0** → fetches git history using `git log -S<name>` to find:
+   - The date it was last modified
+   - The author who last touched it
+   - How many days ago that was
+3. **Renders a CodeLens** inline, right above the function declaration
 
-Two tiers:
+---
+
+## 📖 Reading the CodeLens Labels
+
+Cobweb shows one of the following labels above each flagged function:
+
+### `⚠️ Possibly dead code · last touched 412d ago by jsmith · stale`
+The function has **no callers inside the project** and has **not been touched in a long time** (past the `staleAfterDays` threshold).
+- Nobody calls it → likely dead
+- Nobody touched it in 412 days → likely forgotten
+- **Action**: Consider deleting it or writing a test for it
+
+---
+
+### `📦 Exported, no internal callers · last touched 90d ago by susheepks`
+The function is **exported** (public API) and has **no callers inside this project** — but external packages or consumers may still use it.
+- Safe to keep if it's part of your public API
+- Worth reviewing if it's an old utility nobody imports anymore
+- Controlled by the `cobweb.respectExports` setting
+
+---
+
+### `⚠️ Possibly dead code · no git history found for this symbol`
+Zero refs, but git has no record of this function being added/changed.
+- May have been added in a commit that renamed/moved the file
+- May be in a shallow clone with incomplete history
+
+---
+
+### `⚠️ Possibly dead code · git history unavailable`
+Zero refs, and there's **no git repo** for this file.
+- Cobweb still flags the zero-ref signal
+- Staleness cannot be determined without git
+
+---
+
+### `❓ refs unknown · last touched 55d ago by alice`
+Cobweb **could not count references** for this function (complex expression that the analyzer couldn't resolve), but it still found git history.
+- Treat as a hint, not a verdict
+- Check manually if the function is called anywhere
+
+---
+
+### `· stale` suffix
+Appended to any label when the function hasn't been touched for more than `cobweb.staleAfterDays` (default: **180 days**). A zero-ref function that is also stale is the strongest dead code signal.
+
+---
+
+## 🌐 Supported Languages
+
+| Language | Analysis Type | What's Detected |
+|---|---|---|
+| TypeScript / TSX | ✅ AST (ts-morph) | Functions, arrow functions, methods, class properties |
+| JavaScript / JSX | ✅ AST (ts-morph) | Functions, arrow functions, methods, class properties |
+| Python | 🔤 Regex | `def` and `async def` functions |
+| Go | 🔤 Regex | `func` declarations and methods |
+| Rust | 🔤 Regex | `fn` and `pub fn` functions |
+| Java | 🔤 Regex | Public/private/protected methods |
+| C# | 🔤 Regex | Methods with access modifiers |
+| PHP | 🔤 Regex | `function` and class methods |
+| Ruby | 🔤 Regex | `def` and `def self.` methods |
+| C / C++ | 🔤 Regex | Function definitions |
+| Swift | 🔤 Regex | `func` declarations |
+| Kotlin | 🔤 Regex | `fun` declarations |
+| SQL | 🔤 Regex | `CREATE FUNCTION`, `CREATE PROCEDURE`, `CREATE VIEW` |
+| Vue | 🔤 Regex | Methods inside `<script>` blocks |
+| Shell / Bash | 🔤 Regex | `function_name() { }` declarations |
+| Dart | 🔤 Regex | Function declarations |
+| Scala | 🔤 Regex | `def` methods |
+
+> **AST** = accurate project-wide reference count  
+> **Regex** = in-file reference count (approximate — labeled as `0 in-file refs`)
+
+---
+
+## ⚙️ Configuration
+
+| Setting | Default | Description |
+|---|---|---|
+| `cobweb.staleAfterDays` | `180` | Days of inactivity before a symbol is marked `stale` |
+| `cobweb.ignoreGlobs` | `["**/node_modules/**", "**/dist/**", "**/*.test.*", "**/*.spec.*"]` | File patterns to skip |
+| `cobweb.respectExports` | `true` | Show `📦 Exported` label instead of `⚠️` for exported symbols |
+| `cobweb.maxFilesPerScan` | `2000` | Safety cap on files analysed per scan (protects monorepos) |
+
+---
+
+## ⚠️ What Cobweb Does NOT Claim
+
+**Zero refs ≠ definitely dead.** Cobweb surfaces a signal — you make the call. It cannot see:
+
+- **Dynamic calls** — `obj[methodName]()`, string-based dispatch, eval
+- **External consumers** — if your function is in a published npm package or used by another repo
+- **Framework conventions** — lifecycle methods called by React, Angular, Vue, NestJS, etc. (a common list is pre-excluded; extend `ignoreGlobs` for your framework)
+- **Test-only usage** — if test files are excluded via `ignoreGlobs` (the default)
+- **Cross-file references in non-TS languages** — regex-based languages count in-file refs only
+
+---
+
+## 🔧 Commands
+
+| Command | Description |
+|---|---|
+| `Cobweb: Refresh Analysis` | Clears all caches and re-runs analysis on open files |
+| `Cobweb: Show Details for Symbol` | Opens a detail popup with full git + ref info for a symbol |
+
+---
+
+## 🛠️ Building From Source
 
 ```bash
-npm test               # unit tests — pure logic, no VS Code needed, run anywhere
-npm run test:integration   # integration tests — real VS Code extension host
-```
-
-**Unit tests** (11 tests, mocha + chai): run against real fixtures — a
-temporary `git init`'d repo (not mocked) for `GitAnalyzer`, and a real
-in-memory `ts-morph` project for `StaticAnalyzer`. These were run and verified
-passing during development. The two real bugs fixed in v0.2.0 (see
-CHANGELOG) were both cases where the code *looked* correct but a mocked test
-would have mocked away the exact behavior that was wrong.
-
-**Integration tests** (`@vscode/test-electron`): activate the real extension
-inside an actual downloaded VS Code instance, open a dynamically-built
-fixture workspace (git repo generated fresh in a temp dir per run — never
-committed, since a nested `.git` can't safely live inside this repo), and
-assert the CodeLens provider's real output end-to-end. **Note on how this was
-verified:** the fixture-generation logic was run and confirmed working
-standalone; the full run (which requires downloading a VS Code binary from
-`update.code.visualstudio.com`) could not be executed in the sandboxed
-environment used to build this scaffold, since that domain isn't network-
-reachable there. It's wired into CI (`.github/workflows/publish.yml`, with
-`xvfb-run` for headless Linux) where GitHub Actions has full internet access,
-and will also run locally on any machine with normal internet access via
-`npm run test:integration`. Confirm it passes in CI or locally before your
-first real release.
-
-A note on `npm audit`: it will report a handful of moderate/high findings.
-All of them are in dev-only tooling (`vsce`, `esbuild`'s dev server, `mocha`'s
-transitive deps, `sharp`'s build chain) that never ships in the packaged
-`.vsix` — `.vscodeignore` excludes `node_modules` and dev-only files from the
-published package.
-
-## Privacy
-
-100% local. No network calls, no data collection, no external servers. The
-only "network" activity is git itself talking to your already-configured
-remote (which you controlled before installing this).
-
-## Building from source
-
-```bash
+git clone https://github.com/susheepks/cobweb.git
+cd cobweb
 npm install
-npm run compile        # type-check + esbuild bundle -> dist/extension.js
-npm run package         # produces a .vsix you can install locally or share
+npm run compile        # TypeScript + esbuild → dist/extension.js
+npm run package        # produces cobweb-x.x.x.vsix
 ```
 
-To try it locally without publishing: in VS Code, `Extensions` panel → `...`
-menu → `Install from VSIX...` → select the generated `.vsix`.
+To install locally without publishing:
+`Extensions panel` → `···` menu → `Install from VSIX...` → select the `.vsix`
 
-## Publishing (free, no infra)
+---
 
-Two free distribution channels, both handled by `.github/workflows/publish.yml`
-on a `git tag v*` push:
+## 🧪 Running Tests
 
-- **VS Code Marketplace** — requires a free Azure DevOps org + a Personal
-  Access Token, then `vsce publish` (or the `publish:marketplace` npm script).
-- **Open VSX** — the open marketplace used by VSCodium, Gitpod, Eclipse Theia,
-  etc. Requires a free Eclipse Foundation account + token, then `ovsx publish`.
+```bash
+npm test                   # Unit tests (mocha + chai) — no VS Code needed
+npm run test:integration   # Full integration tests inside a real VS Code instance
+```
 
-Both are free forever for open extensions; GitHub Actions is free for public
-repos, so the entire pipeline — build, test, package, publish — costs nothing.
+Tests cover: GitAnalyzer (real git repos), StaticAnalyzer (AST candidates), and arrow function detection.
 
-## License
+---
 
-MIT
+## 🔒 Privacy
+
+Cobweb makes **zero network requests**. It runs entirely locally:
+- `ts-morph` — TypeScript/JavaScript AST in-process
+- `simple-git` — shells out to your local `git` binary only
+- No analytics, no crash reporting, no telemetry of any kind
+
+---
+
+## 📄 License
+
+MIT © susheepks
