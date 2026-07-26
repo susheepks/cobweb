@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { LRUCache } from 'lru-cache';
 import pLimit from 'p-limit';
+import type { SimpleGit } from 'simple-git';
 import { RepoRegistry } from './repoRegistry';
 
 export interface GitSymbolHistory {
@@ -97,10 +98,17 @@ export class GitAnalyzer {
       // real history). The pickaxe flag requires no separator between -S and
       // the search string, so raw argv is built directly instead of relying
       // on the options-object mapping.
+      //
+      // BUGFIX: only the single most recent commit is needed for the
+      // "last touched / last author" display, so this now asks for `-n 1`
+      // instead of `-n 5`. The previous `-n 5` silently capped
+      // commitCountTouchingSymbol at 5 for any symbol with a longer history,
+      // making that field quietly wrong rather than merely incomplete. The
+      // true count is now fetched separately (see below) without a limit.
       const log = await repo.git.log([
         '--follow',
         `-S${symbolName}`,
-        '-n', '5',
+        '-n', '1',
         '--',
         relPath,
       ]);
@@ -119,17 +127,36 @@ export class GitAnalyzer {
         (Date.now() - new Date(mostRecent.date).getTime()) / (1000 * 60 * 60 * 24)
       );
 
+      // Cheap, unbounded count of commits touching this symbol — `--oneline`
+      // keeps the output small even on symbols with hundreds of touches.
+      const commitCountTouchingSymbol = await this.countSymbolCommits(repo.git, symbolName, relPath);
+
       return {
         lastModifiedISO: mostRecent.date,
         daysSinceLastModified: days,
         lastAuthor: mostRecent.author_name || null,
-        commitCountTouchingSymbol: log.all.length,
+        commitCountTouchingSymbol,
         fileTrackedByGit: true,
         repoUsable: true,
         isShallowRepo: repo.isShallow,
       };
     } catch {
       return { ...EMPTY_HISTORY, repoUsable: true, isShallowRepo: repo.isShallow, fileTrackedByGit: true };
+    }
+  }
+
+  /** Counts every commit touching `symbolName` in `relPath`, with no `-n`
+   *  limit. `--oneline` keeps each line to a single short hash + subject so
+   *  this stays cheap even on symbols with a long edit history. Falls back
+   *  to 1 (we already know at least one commit exists, from the caller) if
+   *  the count query itself fails for any reason. */
+  private async countSymbolCommits(git: SimpleGit, symbolName: string, relPath: string): Promise<number> {
+    try {
+      const output = await git.raw(['log', '--follow', '--oneline', `-S${symbolName}`, '--', relPath]);
+      const lineCount = output.split('\n').filter((line) => line.trim().length > 0).length;
+      return lineCount > 0 ? lineCount : 1;
+    } catch {
+      return 1;
     }
   }
 }

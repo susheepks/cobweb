@@ -1,0 +1,346 @@
+diff -ruN /home/claude/cobweb-pristine/src/cobwebProvider.ts /home/claude/cobweb-main/src/cobwebProvider.ts
+--- /home/claude/cobweb-pristine/src/cobwebProvider.ts	2026-07-26 16:40:24.000000000 +0000
++++ /home/claude/cobweb-main/src/cobwebProvider.ts	2026-07-26 17:44:45.439554248 +0000
+@@ -30,6 +30,7 @@
+   refresh(): void {
+     this.gitAnalyzer.invalidateCache();
+     this.regexAnalyzer.invalidateCache();
++    this.staticAnalyzer.invalidateCache();
+     this._onDidChangeCodeLenses.fire();
+   }
+ 
+@@ -55,6 +56,20 @@
+     }
+ 
+     const isAstLanguage = CobwebProvider.TS_LANGUAGES.has(document.languageId);
++
++    if (isAstLanguage) {
++      // BUGFIX: reference counts for TS/JS used to only cover files the user
++      // had personally opened in a tab, since that was the only way files
++      // ever entered the ts-morph Project. Seed the whole workspace root
++      // once (cheap on repeat calls) so a function called only from an
++      // unopened file is no longer misreported as having zero callers.
++      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
++      if (workspaceFolder) {
++        const maxFiles = config.get<number>('maxFilesPerScan', 2000);
++        this.staticAnalyzer.seedWorkspaceIfNeeded(workspaceFolder.uri.fsPath, ignoreGlobs, maxFiles);
++      }
++    }
++
+     let candidates;
+     try {
+       if (isAstLanguage) {
+diff -ruN /home/claude/cobweb-pristine/src/gitAnalyzer.ts /home/claude/cobweb-main/src/gitAnalyzer.ts
+--- /home/claude/cobweb-pristine/src/gitAnalyzer.ts	2026-07-26 16:40:24.000000000 +0000
++++ /home/claude/cobweb-main/src/gitAnalyzer.ts	2026-07-26 17:45:05.260043680 +0000
+@@ -2,6 +2,7 @@
+ import * as fs from 'fs';
+ import { LRUCache } from 'lru-cache';
+ import pLimit from 'p-limit';
++import type { SimpleGit } from 'simple-git';
+ import { RepoRegistry } from './repoRegistry';
+ 
+ export interface GitSymbolHistory {
+@@ -97,10 +98,17 @@
+       // real history). The pickaxe flag requires no separator between -S and
+       // the search string, so raw argv is built directly instead of relying
+       // on the options-object mapping.
++      //
++      // BUGFIX: only the single most recent commit is needed for the
++      // "last touched / last author" display, so this now asks for `-n 1`
++      // instead of `-n 5`. The previous `-n 5` silently capped
++      // commitCountTouchingSymbol at 5 for any symbol with a longer history,
++      // making that field quietly wrong rather than merely incomplete. The
++      // true count is now fetched separately (see below) without a limit.
+       const log = await repo.git.log([
+         '--follow',
+         `-S${symbolName}`,
+-        '-n', '5',
++        '-n', '1',
+         '--',
+         relPath,
+       ]);
+@@ -119,11 +127,15 @@
+         (Date.now() - new Date(mostRecent.date).getTime()) / (1000 * 60 * 60 * 24)
+       );
+ 
++      // Cheap, unbounded count of commits touching this symbol — `--oneline`
++      // keeps the output small even on symbols with hundreds of touches.
++      const commitCountTouchingSymbol = await this.countSymbolCommits(repo.git, symbolName, relPath);
++
+       return {
+         lastModifiedISO: mostRecent.date,
+         daysSinceLastModified: days,
+         lastAuthor: mostRecent.author_name || null,
+-        commitCountTouchingSymbol: log.all.length,
++        commitCountTouchingSymbol,
+         fileTrackedByGit: true,
+         repoUsable: true,
+         isShallowRepo: repo.isShallow,
+@@ -132,4 +144,19 @@
+       return { ...EMPTY_HISTORY, repoUsable: true, isShallowRepo: repo.isShallow, fileTrackedByGit: true };
+     }
+   }
++
++  /** Counts every commit touching `symbolName` in `relPath`, with no `-n`
++   *  limit. `--oneline` keeps each line to a single short hash + subject so
++   *  this stays cheap even on symbols with a long edit history. Falls back
++   *  to 1 (we already know at least one commit exists, from the caller) if
++   *  the count query itself fails for any reason. */
++  private async countSymbolCommits(git: SimpleGit, symbolName: string, relPath: string): Promise<number> {
++    try {
++      const output = await git.raw(['log', '--follow', '--oneline', `-S${symbolName}`, '--', relPath]);
++      const lineCount = output.split('\n').filter((line) => line.trim().length > 0).length;
++      return lineCount > 0 ? lineCount : 1;
++    } catch {
++      return 1;
++    }
++  }
+ }
+diff -ruN /home/claude/cobweb-pristine/src/regexAnalyzer.ts /home/claude/cobweb-main/src/regexAnalyzer.ts
+--- /home/claude/cobweb-pristine/src/regexAnalyzer.ts	2026-07-26 16:40:24.000000000 +0000
++++ /home/claude/cobweb-main/src/regexAnalyzer.ts	2026-07-26 17:45:12.707726789 +0000
+@@ -48,7 +48,7 @@
+   // ── Java ────────────────────────────────────────────────────────────────────
+   java: {
+     symbolPattern:
+-      /(?:(?:public|private|protected|static|final|synchronized|native|abstract)\s+)+(?:[\w<>\[\]]+\s+)+(\w+)\s*\(/gm,
++      /(?:(?:public|private|protected|static|final|synchronized|native|abstract)\s+)+(?:[\w<>[\]]+\s+)+(\w+)\s*\(/gm,
+     nameGroup: 1,
+     lifecycleNames: new Set([
+       'main', 'toString', 'hashCode', 'equals', 'compareTo',
+@@ -60,7 +60,7 @@
+   // ── C# ──────────────────────────────────────────────────────────────────────
+   csharp: {
+     symbolPattern:
+-      /(?:(?:public|private|protected|internal|static|virtual|override|async|abstract|sealed|new)\s+)+(?:[\w<>\[\]?,\s]+\s+)(\w+)\s*\(/gm,
++      /(?:(?:public|private|protected|internal|static|virtual|override|async|abstract|sealed|new)\s+)+(?:[\w<>[\]?,\s]+\s+)(\w+)\s*\(/gm,
+     nameGroup: 1,
+     lifecycleNames: new Set([
+       'Main', 'ToString', 'GetHashCode', 'Equals', 'Dispose',
+diff -ruN /home/claude/cobweb-pristine/src/staticAnalyzer.ts /home/claude/cobweb-main/src/staticAnalyzer.ts
+--- /home/claude/cobweb-pristine/src/staticAnalyzer.ts	2026-07-26 16:40:24.000000000 +0000
++++ /home/claude/cobweb-main/src/staticAnalyzer.ts	2026-07-26 17:44:36.289519442 +0000
+@@ -1,3 +1,4 @@
++import * as path from 'path';
+ import { Project, SourceFile, Node, FunctionDeclaration, MethodDeclaration, PropertyDeclaration } from 'ts-morph';
+ 
+ export interface SymbolCandidate {
+@@ -37,12 +38,84 @@
+   private project: Project;
+   private candidateCache = new Map<string, SymbolCandidate[]>(); // key: `${path}::${version}`
+ 
++  /**
++   * BUGFIX (v0.4.0): previously the ts-morph Project only ever contained
++   * whichever files had individually been passed through
++   * findCandidatesForDocument() — i.e. files the user happened to have open
++   * in an editor tab. findReferencesAsNodes() can only see call sites inside
++   * files that are actually IN the project, so a function called only from
++   * a file the user hadn't opened yet was silently reported as 0 references
++   * ("no internal callers") even though it was genuinely used. That directly
++   * contradicted the "AST = accurate project-wide reference count" claim.
++   *
++   * seedWorkspaceIfNeeded() eagerly adds every source file under a workspace
++   * root into the same Project (once per root, cheap thereafter), so
++   * reference lookups see the whole project rather than only opened files.
++   */
++  private seededRoots = new Set<string>();
++
+   constructor(tsConfigFilePath?: string) {
+     this.project = tsConfigFilePath
+       ? new Project({ tsConfigFilePath, skipAddingFilesFromTsConfig: false })
+       : new Project({ useInMemoryFileSystem: false });
+   }
+ 
++  /**
++   * Loads every TS/JS file under `workspaceRoot` into the shared ts-morph
++   * Project (excluding node_modules/dist/build and any user ignoreGlobs), so
++   * that reference counts reflect the whole project instead of only files
++   * that happen to already be open. Safe to call repeatedly — a root is only
++   * scanned once per StaticAnalyzer instance (i.e. per extension session),
++   * and the actual work is skipped entirely if it was already seeded.
++   *
++   * Best-effort: if the glob scan fails for any reason (permissions,
++   * pathological monorepo, etc.), we swallow the error and fall back to the
++   * old lazy per-file behavior rather than breaking CodeLens rendering.
++   */
++  seedWorkspaceIfNeeded(workspaceRoot: string, ignoreGlobs: string[], maxFiles: number): void {
++    const normalizedRoot = path.resolve(workspaceRoot);
++    if (this.seededRoots.has(normalizedRoot)) return;
++    this.seededRoots.add(normalizedRoot);
++
++    try {
++      const includePatterns = ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'].map((p) =>
++        path.join(normalizedRoot, p).split(path.sep).join('/')
++      );
++      // ts-morph's glob matcher supports leading "!" negation patterns.
++      const defaultExcludes = ['**/node_modules/**', '**/dist/**', '**/build/**', '**/out/**'];
++      const excludePatterns = [...new Set([...defaultExcludes, ...ignoreGlobs])].map(
++        (g) => `!${path.join(normalizedRoot, g).split(path.sep).join('/')}`
++      );
++
++      const added = this.project.addSourceFilesAtPaths([...includePatterns, ...excludePatterns]);
++
++      if (added.length > maxFiles) {
++        // Pathologically large workspace slipped past ignoreGlobs (e.g. a
++        // monorepo without proper excludes configured yet). Keep the first
++        // maxFiles files already added — removing the rest keeps memory and
++        // findReferencesAsNodes() latency bounded — and let the safety valve
++        // in CobwebProvider (document size cap) continue to protect typing
++        // latency for whichever individual files remain open.
++        for (const extra of added.slice(maxFiles)) {
++          this.project.removeSourceFile(extra);
++        }
++      }
++    } catch {
++      // Seeding is an optimization, not a correctness requirement for the
++      // currently-open file — swallow and continue with whatever is loaded.
++    }
++  }
++
++  /** Clears the per-document candidate cache and forgets which workspace
++   *  roots were seeded, so the next analysis re-seeds from scratch. Needed
++   *  because ignoreGlobs (used to build the seed exclude patterns) can
++   *  change after a root was already seeded, and because newly created
++   *  files on disk won't be picked up by a root that's already marked seeded. */
++  invalidateCache(): void {
++    this.candidateCache.clear();
++    this.seededRoots.clear();
++  }
++
+   findCandidatesForDocument(
+     absolutePath: string,
+     text: string,
+diff -ruN /home/claude/cobweb-pristine/src/test/gitAnalyzer.test.ts /home/claude/cobweb-main/src/test/gitAnalyzer.test.ts
+--- /home/claude/cobweb-pristine/src/test/gitAnalyzer.test.ts	2026-07-26 16:40:24.000000000 +0000
++++ /home/claude/cobweb-main/src/test/gitAnalyzer.test.ts	2026-07-26 17:45:32.430378394 +0000
+@@ -39,6 +39,34 @@
+     expect(history.daysSinceLastModified).to.be.a('number');
+   });
+ 
++  it('REGRESSION: commitCountTouchingSymbol is not capped at 5', async () => {
++    const filePath = path.join(repoDir, 'churny.ts');
++    // git's `-S<string>` pickaxe only matches commits where the number of
++    // OCCURRENCES of the string changes — editing a function's body while
++    // keeping its name present doesn't count as a new pickaxe hit. So to
++    // generate 7 genuine, independently-detectable commits we toggle the
++    // symbol's presence (added / removed / added / ...) rather than just
++    // editing its body — one more than the old hardcoded `-n 5` limit, which
++    // silently truncated commitCountTouchingSymbol on the pre-fix code path.
++    // NOTE: the "removed" placeholder text below must NOT itself contain the
++    // substring "churnFn", or the pickaxe occurrence count won't change and
++    // git will skip that commit too.
++    for (let i = 0; i < 7; i++) {
++      const present = i % 2 === 0;
++      fs.writeFileSync(
++        filePath,
++        present ? `function churnFn() { return ${i}; }\n` : `// symbol temporarily removed\n`
++      );
++      sh('git add churny.ts', repoDir);
++      sh(`git commit -q -m "toggle churnFn ${i}"`, repoDir);
++    }
++
++    const analyzer = new GitAnalyzer();
++    const history = await analyzer.getSymbolHistory(filePath, 'churnFn');
++
++    expect(history.commitCountTouchingSymbol).to.equal(7);
++  });
++
+   it('reports fileTrackedByGit=false for an untracked file', async () => {
+     const filePath = path.join(repoDir, 'untracked.ts');
+     fs.writeFileSync(filePath, 'function neverCommitted() {}\n');
+diff -ruN /home/claude/cobweb-pristine/src/test/staticAnalyzer.test.ts /home/claude/cobweb-main/src/test/staticAnalyzer.test.ts
+--- /home/claude/cobweb-pristine/src/test/staticAnalyzer.test.ts	2026-07-26 16:40:24.000000000 +0000
++++ /home/claude/cobweb-main/src/test/staticAnalyzer.test.ts	2026-07-26 17:45:25.540100025 +0000
+@@ -1,7 +1,91 @@
+ import { expect } from 'chai';
++import * as fs from 'fs';
++import * as os from 'os';
++import * as path from 'path';
+ import { StaticAnalyzer } from '../staticAnalyzer';
+ 
+ describe('StaticAnalyzer', () => {
++  describe('seedWorkspaceIfNeeded (project-wide references)', () => {
++    let workspaceDir: string;
++
++    beforeEach(() => {
++      workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cobweb-workspace-'));
++    });
++
++    afterEach(() => {
++      fs.rmSync(workspaceDir, { recursive: true, force: true });
++    });
++
++    it('REGRESSION: finds a caller that lives in a file the user never opened', () => {
++      // helper.ts is never passed through findCandidatesForDocument() below —
++      // it only exists on disk. Before the fix, the ts-morph Project never
++      // saw this file, so helperFn's caller in caller.ts was invisible and
++      // helperFn was misreported as having zero references.
++      fs.writeFileSync(
++        path.join(workspaceDir, 'helper.ts'),
++        `export function helperFn() { return 1; }\n`
++      );
++      fs.writeFileSync(
++        path.join(workspaceDir, 'caller.ts'),
++        `import { helperFn } from './helper';\nhelperFn();\n`
++      );
++
++      const analyzer = new StaticAnalyzer();
++      analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
++
++      // The ONLY document ever explicitly analyzed is helper.ts — caller.ts
++      // is only on disk, standing in for "a file the user hasn't opened".
++      const candidates = analyzer.findCandidatesForDocument(
++        path.join(workspaceDir, 'helper.ts'),
++        fs.readFileSync(path.join(workspaceDir, 'helper.ts'), 'utf8'),
++        1
++      );
++
++      const helperFn = candidates.find((c) => c.name === 'helperFn');
++      // Before the fix this was 0, since caller.ts was never in the ts-morph
++      // Project. ts-morph's findReferencesAsNodes() — like VS Code's own
++      // "Find All References" — counts the `import { helperFn }` specifier
++      // itself as one reference node, plus one for the `helperFn()` call
++      // site, so a single genuine cross-file caller legitimately reports as
++      // 2 rather than 1. The assertion below checks "no longer zero" rather
++      // than a brittle exact count tied to that ts-morph implementation detail.
++      expect(helperFn?.referenceCountInProject).to.be.greaterThan(0);
++    });
++
++    it('respects ignoreGlobs so excluded files are not silently counted as callers', () => {
++      fs.writeFileSync(
++        path.join(workspaceDir, 'helper.ts'),
++        `export function helperFn() { return 1; }\n`
++      );
++      fs.mkdirSync(path.join(workspaceDir, 'dist'));
++      fs.writeFileSync(
++        path.join(workspaceDir, 'dist', 'bundled.ts'),
++        `import { helperFn } from '../helper';\nhelperFn();\n`
++      );
++
++      const analyzer = new StaticAnalyzer();
++      analyzer.seedWorkspaceIfNeeded(workspaceDir, ['**/dist/**'], 2000);
++
++      const candidates = analyzer.findCandidatesForDocument(
++        path.join(workspaceDir, 'helper.ts'),
++        fs.readFileSync(path.join(workspaceDir, 'helper.ts'), 'utf8'),
++        1
++      );
++
++      const helperFn = candidates.find((c) => c.name === 'helperFn');
++      expect(helperFn?.referenceCountInProject).to.equal(0);
++    });
++
++    it('is idempotent — seeding the same root twice does not throw or duplicate files', () => {
++      fs.writeFileSync(path.join(workspaceDir, 'a.ts'), `export function a() {}\n`);
++
++      const analyzer = new StaticAnalyzer();
++      expect(() => {
++        analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
++        analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
++      }).to.not.throw();
++    });
++  });
+   it('flags a function with zero internal references', () => {
+     const analyzer = new StaticAnalyzer();
+     const code = `
