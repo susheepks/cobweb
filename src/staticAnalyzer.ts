@@ -1,4 +1,4 @@
-import { Project, SourceFile, Node, FunctionDeclaration, MethodDeclaration } from 'ts-morph';
+import { Project, SourceFile, Node, FunctionDeclaration, MethodDeclaration, PropertyDeclaration } from 'ts-morph';
 
 export interface SymbolCandidate {
   name: string;
@@ -10,11 +10,19 @@ export interface SymbolCandidate {
 // Names commonly invoked by frameworks via convention/reflection rather than
 // direct call sites — flagging these as "dead" would be a constant false positive.
 const FRAMEWORK_LIFECYCLE_NAMES = new Set([
+  // React class lifecycle
   'render', 'componentDidMount', 'componentWillUnmount', 'componentDidUpdate',
-  'ngOnInit', 'ngOnDestroy', 'ngOnChanges',
+  'componentDidCatch', 'shouldComponentUpdate', 'getDerivedStateFromProps',
+  // React hooks (arrow function style is very common for these)
+  'useEffect', 'useMemo', 'useCallback', 'useReducer',
+  // Angular
+  'ngOnInit', 'ngOnDestroy', 'ngOnChanges', 'ngAfterViewInit', 'ngAfterContentInit',
+  // NestJS
   'onModuleInit', 'onModuleDestroy',
-  'setup', 'mounted', 'beforeDestroy', 'created',
-  'main', 'handler', 'default',
+  // Vue
+  'setup', 'mounted', 'beforeDestroy', 'created', 'beforeMount', 'unmounted',
+  // Generic
+  'main', 'handler', 'default', 'middleware', 'reducer',
 ]);
 
 /**
@@ -73,16 +81,18 @@ export class StaticAnalyzer {
   private computeCandidates(sourceFile: SourceFile): SymbolCandidate[] {
     const candidates: SymbolCandidate[] = [];
 
+    // ── 1. Traditional function declarations: function foo() {} ────────────────
     const functions = sourceFile.getFunctions();
+
+    // ── 2. Class methods: class C { foo() {} } ────────────────────────────────
     const classes = sourceFile.getClasses();
     const methods: MethodDeclaration[] = classes.flatMap((c) => c.getMethods());
+
     const allDecls: (FunctionDeclaration | MethodDeclaration)[] = [...functions, ...methods];
 
     for (const decl of allDecls) {
       const name = decl.getName();
-      if (!name) continue;
-
-      if (FRAMEWORK_LIFECYCLE_NAMES.has(name)) continue;
+      if (!name || FRAMEWORK_LIFECYCLE_NAMES.has(name)) continue;
 
       const isExported = Node.isFunctionDeclaration(decl)
         ? decl.isExported() || decl.isDefaultExport()
@@ -90,12 +100,8 @@ export class StaticAnalyzer {
 
       let referenceCount: number;
       try {
-        // findReferencesAsNodes() returns only USAGE sites in this
-        // ts-morph/TS-language-service version — it does NOT include the
-        // declaration's own identifier. Verified empirically: a function
-        // with 2 call sites returns exactly 2 nodes, not 3. Do not subtract
-        // 1 here — an earlier draft of this code did, which silently
-        // mislabeled every genuinely-used single-call-site function as dead.
+        // findReferencesAsNodes() returns only USAGE sites — does NOT include
+        // the declaration itself. Do not subtract 1 here.
         const refs = decl.findReferencesAsNodes();
         referenceCount = refs.length;
       } catch {
@@ -106,6 +112,66 @@ export class StaticAnalyzer {
         name,
         startLine: decl.getStartLineNumber(),
         isExported,
+        referenceCountInProject: referenceCount,
+      });
+    }
+
+    // ── 3. Arrow functions / function expressions in variable declarations ──────
+    //   const foo = () => {}          ← ArrowFunction
+    //   const foo = async () => {}    ← ArrowFunction
+    //   const foo = function() {}     ← FunctionExpression
+    const arrowVarDecls = sourceFile.getVariableDeclarations().filter((v) => {
+      const init = v.getInitializer();
+      return init !== undefined && (Node.isArrowFunction(init) || Node.isFunctionExpression(init));
+    });
+
+    for (const varDecl of arrowVarDecls) {
+      const name = varDecl.getName();
+      if (!name || FRAMEWORK_LIFECYCLE_NAMES.has(name)) continue;
+
+      const parentStatement = varDecl.getVariableStatement();
+      const isExported = parentStatement?.isExported() ?? false;
+
+      let referenceCount: number;
+      try {
+        const refs = varDecl.findReferencesAsNodes();
+        referenceCount = refs.length;
+      } catch {
+        referenceCount = -1;
+      }
+
+      candidates.push({
+        name,
+        startLine: varDecl.getStartLineNumber(),
+        isExported,
+        referenceCountInProject: referenceCount,
+      });
+    }
+
+    // ── 4. Class property arrow functions: class C { foo = () => {} } ─────────
+    const classPropertyArrows: PropertyDeclaration[] = classes.flatMap((c) =>
+      c.getProperties().filter((p) => {
+        const init = p.getInitializer();
+        return init !== undefined && (Node.isArrowFunction(init) || Node.isFunctionExpression(init));
+      })
+    );
+
+    for (const prop of classPropertyArrows) {
+      const name = prop.getName();
+      if (!name || FRAMEWORK_LIFECYCLE_NAMES.has(name)) continue;
+
+      let referenceCount: number;
+      try {
+        const refs = prop.findReferencesAsNodes();
+        referenceCount = refs.length;
+      } catch {
+        referenceCount = -1;
+      }
+
+      candidates.push({
+        name,
+        startLine: prop.getStartLineNumber(),
+        isExported: false,
         referenceCountInProject: referenceCount,
       });
     }
