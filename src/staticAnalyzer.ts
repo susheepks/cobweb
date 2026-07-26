@@ -1,11 +1,17 @@
 import * as path from 'path';
-import { Project, SourceFile, Node, FunctionDeclaration, MethodDeclaration, PropertyDeclaration } from 'ts-morph';
+import { Project, SourceFile, Node, FunctionDeclaration, MethodDeclaration, PropertyDeclaration, ArrowFunction, FunctionExpression } from 'ts-morph';
 
 export interface SymbolCandidate {
   name: string;
   startLine: number;
   isExported: boolean;
   referenceCountInProject: number;
+}
+
+export type FunctionLikeNode = FunctionDeclaration | MethodDeclaration | ArrowFunction | FunctionExpression;
+
+export interface SymbolCandidateWithNode extends SymbolCandidate {
+  node: FunctionLikeNode;
 }
 
 // Names commonly invoked by frameworks via convention/reflection rather than
@@ -118,8 +124,8 @@ export class StaticAnalyzer {
    * This is used for project-wide checks (e.g., duplicates, dashboard) without needing
    * to re-parse or spawn a new ts-morph Project.
    */
-  getAllCandidatesInSeededProject(): { filePath: string; candidate: SymbolCandidate }[] {
-    const results: { filePath: string; candidate: SymbolCandidate }[] = [];
+  getAllCandidatesInSeededProject(): { filePath: string; candidate: SymbolCandidateWithNode }[] {
+    const results: { filePath: string; candidate: SymbolCandidateWithNode }[] = [];
     for (const sourceFile of this.project.getSourceFiles()) {
       const filePath = sourceFile.getFilePath();
       const candidates = this.computeCandidates(sourceFile);
@@ -140,7 +146,15 @@ export class StaticAnalyzer {
     if (cached) return cached;
 
     const sourceFile = this.addOrRefreshFile(absolutePath, text);
-    const result = this.computeCandidates(sourceFile);
+    const resultWithNode = this.computeCandidates(sourceFile);
+    
+    // Strip the ts-morph node before returning public SymbolCandidate array
+    const result = resultWithNode.map(c => ({
+      name: c.name,
+      startLine: c.startLine,
+      isExported: c.isExported,
+      referenceCountInProject: c.referenceCountInProject
+    }));
 
     if (this.candidateCache.size > 500) {
       const oldestKey = this.candidateCache.keys().next().value;
@@ -165,8 +179,8 @@ export class StaticAnalyzer {
    * full list (dynamic dispatch, external consumers, framework conventions,
    * barrel re-exports). This method surfaces a count, never a verdict.
    */
-  private computeCandidates(sourceFile: SourceFile): SymbolCandidate[] {
-    const candidates: SymbolCandidate[] = [];
+  private computeCandidates(sourceFile: SourceFile): SymbolCandidateWithNode[] {
+    const candidates: SymbolCandidateWithNode[] = [];
 
     // ── 1. Traditional function declarations: function foo() {} ────────────────
     const functions = sourceFile.getFunctions();
@@ -200,6 +214,7 @@ export class StaticAnalyzer {
         startLine: decl.getStartLineNumber(),
         isExported,
         referenceCountInProject: referenceCount,
+        node: decl
       });
     }
 
@@ -207,14 +222,14 @@ export class StaticAnalyzer {
     //   const foo = () => {}          ← ArrowFunction
     //   const foo = async () => {}    ← ArrowFunction
     //   const foo = function() {}     ← FunctionExpression
-    const arrowVarDecls = sourceFile.getVariableDeclarations().filter((v) => {
-      const init = v.getInitializer();
-      return init !== undefined && (Node.isArrowFunction(init) || Node.isFunctionExpression(init));
-    });
+    const arrowVarDecls = sourceFile.getVariableDeclarations();
 
     for (const varDecl of arrowVarDecls) {
       const name = varDecl.getName();
       if (!name || FRAMEWORK_LIFECYCLE_NAMES.has(name)) continue;
+
+      const init = varDecl.getInitializer();
+      if (!init || !(Node.isArrowFunction(init) || Node.isFunctionExpression(init))) continue;
 
       const parentStatement = varDecl.getVariableStatement();
       const isExported = parentStatement?.isExported() ?? false;
@@ -232,6 +247,7 @@ export class StaticAnalyzer {
         startLine: varDecl.getStartLineNumber(),
         isExported,
         referenceCountInProject: referenceCount,
+        node: init as (ArrowFunction | FunctionExpression)
       });
     }
 
@@ -247,6 +263,9 @@ export class StaticAnalyzer {
       const name = prop.getName();
       if (!name || FRAMEWORK_LIFECYCLE_NAMES.has(name)) continue;
 
+      const init = prop.getInitializer();
+      if (!init || !(Node.isArrowFunction(init) || Node.isFunctionExpression(init))) continue;
+
       let referenceCount: number;
       try {
         const refs = prop.findReferencesAsNodes();
@@ -258,8 +277,10 @@ export class StaticAnalyzer {
       candidates.push({
         name,
         startLine: prop.getStartLineNumber(),
+        // Class properties are not individually exported in the module sense
         isExported: false,
         referenceCountInProject: referenceCount,
+        node: init as (ArrowFunction | FunctionExpression)
       });
     }
 

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { StaticAnalyzer } from '../staticAnalyzer';
+import { Node } from 'ts-morph';
 
 describe('StaticAnalyzer', () => {
   describe('seedWorkspaceIfNeeded (project-wide references)', () => {
@@ -101,8 +102,13 @@ describe('StaticAnalyzer', () => {
 
       expect(funcOne).to.exist;
       expect(funcOne?.filePath.replace(/\\/g, '/')).to.include('/file1.ts');
+      expect(funcOne?.candidate.node).to.exist;
+      expect(Node.isFunctionDeclaration(funcOne!.candidate.node)).to.be.true;
+
       expect(funcTwo).to.exist;
       expect(funcTwo?.filePath.replace(/\\/g, '/')).to.include('/file2.ts');
+      expect(funcTwo?.candidate.node).to.exist;
+      expect(Node.isFunctionDeclaration(funcTwo!.candidate.node)).to.be.true;
     });
   });
 
