@@ -1,87 +1,109 @@
-# Cobweb — Git-Based Dead Code Detector
+# 🕸️ Cobweb — Git-Based Dead Code Detector
 
 > **Find functions nobody calls. Know when they were last touched. Decide if they should go.**
 
-Cobweb is a VS Code extension that sits silently in your editor and surfaces **stale, possibly dead functions** using two signals:
-1. **Static analysis** — counts how many places in your project call each function
-2. **Git history** — checks when it was last modified and by whom
+Cobweb is a VS Code extension that sits quietly in your editor and flags **stale, possibly dead functions** by combining two signals:
 
-No servers. No accounts. No telemetry. Everything runs 100% locally against the repo already open in your editor.
+1. **Static analysis** — how many places in your project call a given function
+2. **Git history** — when it was last changed, and by whom
+
+Everything runs **100% locally** against the repo already open in your editor — no servers, no accounts, no telemetry.
 
 ---
 
-## ✨ Features
+## Table of Contents
+
+- [Why Cobweb](#why-cobweb)
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Installation](#installation)
+- [Reading the CodeLens Labels](#reading-the-codelens-labels)
+- [Supported Languages](#supported-languages)
+- [Configuration](#configuration)
+- [Commands](#commands)
+- [What Cobweb Does NOT Claim](#what-cobweb-does-not-claim)
+- [Building From Source](#building-from-source)
+- [Running Tests](#running-tests)
+- [Privacy](#privacy)
+- [License](#license)
+
+---
+
+## Why Cobweb
+
+Every codebase accumulates functions that used to matter and quietly stopped being called. Cobweb answers three questions right where you're already reading code, with no dashboards to check:
+
+- Is anything in the project actually calling this function?
+- If not, how long has it been sitting there untouched?
+- Who wrote it (or last touched it), so you know who to ask before deleting it?
+
+## Features
 
 - 🔍 **Dead code detection** — flags functions with zero internal references
 - 📅 **Git-backed staleness** — shows how many days ago a function was last touched
 - 👤 **Author attribution** — shows who last modified the function
-- 🏷️ **Smart export awareness** — treats exported functions differently (they may have external callers)
-- ⚡ **Incremental caching** — results are cached per file version; re-runs only when code changes
+- 🏷️ **Smart export awareness** — treats exported functions differently, since they may have external callers
+- ⚡ **Incremental caching** — results are cached per file version; re-runs only when code actually changes
 - 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
 - 🔒 **Privacy first** — zero network calls, zero data collection
 
----
+## How It Works
 
-## 🔬 How It Works
+For every function or method in the open file, Cobweb:
 
-For each function/method in your file, Cobweb:
-
-1. **Counts references** — how many times it is called within the project
-2. **If references = 0** → fetches git history using `git log -S<name>` to find:
+1. **Counts references** — how many times it's called elsewhere in the project
+2. **If references = 0** → runs `git log -S<name>` against your local git history to find:
    - The date it was last modified
    - The author who last touched it
    - How many days ago that was
-3. **Renders a CodeLens** inline, right above the function declaration
+3. **Renders an inline CodeLens** directly above the function declaration, so the signal lives right next to the code it describes
 
----
+## Installation
 
-## 📖 Reading the CodeLens Labels
+**From a packaged extension:**
 
-Cobweb shows one of the following labels above each flagged function:
+1. Download or build the `.vsix` file (see [Building From Source](#building-from-source))
+2. In VS Code, open the **Extensions** panel
+3. Click the **···** menu → **Install from VSIX...**
+4. Select the `.vsix` file
+
+Cobweb activates automatically on supported file types in any folder that is a git repository — no setup required.
+
+## Reading the CodeLens Labels
+
+Cobweb shows one of the following labels above each flagged function.
 
 ### `⚠️ Possibly dead code · last touched 412d ago by jsmith · stale`
-The function has **no callers inside the project** and has **not been touched in a long time** (past the `staleAfterDays` threshold).
+The function has **no callers inside the project** and **hasn't been touched in a long time** (past the `staleAfterDays` threshold).
 - Nobody calls it → likely dead
 - Nobody touched it in 412 days → likely forgotten
-- **Action**: Consider deleting it or writing a test for it
-
----
+- **Action:** consider deleting it, or write a test that proves it's still needed
 
 ### `📦 Exported, no internal callers · last touched 90d ago by susheepks`
-The function is **exported** (public API) and has **no callers inside this project** — but external packages or consumers may still use it.
-- Safe to keep if it's part of your public API
+The function is **exported** (part of the public API) and has **no callers inside this project** — but external packages or consumers may still use it.
+- Safe to keep if it's genuinely public API
 - Worth reviewing if it's an old utility nobody imports anymore
 - Controlled by the `cobweb.respectExports` setting
 
----
-
 ### `⚠️ Possibly dead code · no git history found for this symbol`
-Zero refs, but git has no record of this function being added/changed.
-- May have been added in a commit that renamed/moved the file
+Zero refs, but git has no record of this function being added or changed.
+- May have been added in a commit that renamed or moved the file
 - May be in a shallow clone with incomplete history
-
----
 
 ### `⚠️ Possibly dead code · git history unavailable`
 Zero refs, and there's **no git repo** for this file.
 - Cobweb still flags the zero-ref signal
-- Staleness cannot be determined without git
-
----
+- Staleness can't be determined without git
 
 ### `❓ refs unknown · last touched 55d ago by alice`
-Cobweb **could not count references** for this function (complex expression that the analyzer couldn't resolve), but it still found git history.
-- Treat as a hint, not a verdict
-- Check manually if the function is called anywhere
-
----
+Cobweb **couldn't count references** for this function (a complex expression the analyzer couldn't resolve), but it did find git history.
+- Treat this as a hint, not a verdict
+- Check manually whether the function is called anywhere
 
 ### `· stale` suffix
-Appended to any label when the function hasn't been touched for more than `cobweb.staleAfterDays` (default: **180 days**). A zero-ref function that is also stale is the strongest dead code signal.
+Appended to any label when the function hasn't been touched for more than `cobweb.staleAfterDays` (default **180 days**). A zero-ref function that is also stale is the strongest dead-code signal Cobweb can give you.
 
----
-
-## 🌐 Supported Languages
+## Supported Languages
 
 | Language | Analysis Type | What's Detected |
 |---|---|---|
@@ -103,44 +125,42 @@ Appended to any label when the function hasn't been touched for more than `cobwe
 | Dart | 🔤 Regex | Function declarations |
 | Scala | 🔤 Regex | `def` methods |
 
-> **AST** = accurate project-wide reference count  
-> **Regex** = in-file reference count (approximate — labeled as `0 in-file refs`)
+> **AST** = accurate, project-wide reference count.
+> **Regex** = in-file reference count only (approximate — shown as `0 in-file refs`).
 
----
+## Configuration
 
-## ⚙️ Configuration
+Set these in your VS Code `settings.json`:
 
 | Setting | Default | Description |
 |---|---|---|
 | `cobweb.staleAfterDays` | `180` | Days of inactivity before a symbol is marked `stale` |
 | `cobweb.ignoreGlobs` | `["**/node_modules/**", "**/dist/**", "**/*.test.*", "**/*.spec.*"]` | File patterns to skip |
 | `cobweb.respectExports` | `true` | Show `📦 Exported` label instead of `⚠️` for exported symbols |
-| `cobweb.maxFilesPerScan` | `2000` | Safety cap on files analysed per scan (protects monorepos) |
+| `cobweb.maxFilesPerScan` | `2000` | Safety cap on files analyzed per scan (protects monorepos) |
 
----
+## Commands
 
-## ⚠️ What Cobweb Does NOT Claim
-
-**Zero refs ≠ definitely dead.** Cobweb surfaces a signal — you make the call. It cannot see:
-
-- **Dynamic calls** — `obj[methodName]()`, string-based dispatch, eval
-- **External consumers** — if your function is in a published npm package or used by another repo
-- **Framework conventions** — lifecycle methods called by React, Angular, Vue, NestJS, etc. (a common list is pre-excluded; extend `ignoreGlobs` for your framework)
-- **Test-only usage** — if test files are excluded via `ignoreGlobs` (the default)
-- **Cross-file references in non-TS languages** — regex-based languages count in-file refs only
-
----
-
-## 🔧 Commands
+Run these from the Command Palette (`Cmd/Ctrl+Shift+P`):
 
 | Command | Description |
 |---|---|
 | `Cobweb: Refresh Analysis` | Clears all caches and re-runs analysis on open files |
-| `Cobweb: Show Details for Symbol` | Opens a detail popup with full git + ref info for a symbol |
+| `Cobweb: Show Details for Symbol` | Opens a detail popup with full git + reference info for a symbol |
 
----
+## What Cobweb Does NOT Claim
 
-## 🛠️ Building From Source
+**Zero refs ≠ definitely dead.** Cobweb surfaces a signal — you make the call. It cannot see:
+
+- **Dynamic calls** — `obj[methodName]()`, string-based dispatch, `eval`
+- **External consumers** — if your function ships in a published npm package or is used by another repo
+- **Framework conventions** — lifecycle methods invoked by React, Angular, Vue, NestJS, etc. (a common list is pre-excluded; extend `ignoreGlobs` for your framework)
+- **Test-only usage** — if test files are excluded via `ignoreGlobs` (the default)
+- **Cross-file references in non-TS languages** — regex-based languages only count in-file references
+
+Use Cobweb's flags as a starting point for a code review, not as an automatic delete instruction.
+
+## Building From Source
 
 ```bash
 git clone https://github.com/susheepks/cobweb.git
@@ -150,31 +170,25 @@ npm run compile        # TypeScript + esbuild → dist/extension.js
 npm run package        # produces cobweb-x.x.x.vsix
 ```
 
-To install locally without publishing:
-`Extensions panel` → `···` menu → `Install from VSIX...` → select the `.vsix`
+To install locally without publishing: **Extensions panel** → **···** menu → **Install from VSIX...** → select the `.vsix`.
 
----
-
-## 🧪 Running Tests
+## Running Tests
 
 ```bash
 npm test                   # Unit tests (mocha + chai) — no VS Code needed
 npm run test:integration   # Full integration tests inside a real VS Code instance
 ```
 
-Tests cover: GitAnalyzer (real git repos), StaticAnalyzer (AST candidates), and arrow function detection.
+Tests cover: `GitAnalyzer` (against real git repos), `StaticAnalyzer` (AST candidates), and arrow function detection.
 
----
-
-## 🔒 Privacy
+## Privacy
 
 Cobweb makes **zero network requests**. It runs entirely locally:
-- `ts-morph` — TypeScript/JavaScript AST in-process
-- `simple-git` — shells out to your local `git` binary only
+
+- [`ts-morph`](https://github.com/dsherret/ts-morph) — TypeScript/JavaScript AST analysis, in-process
+- [`simple-git`](https://github.com/steveukx/git-js) — shells out to your local `git` binary only
 - No analytics, no crash reporting, no telemetry of any kind
 
----
+## License
 
-## 📄 License
-
-MIT © susheepks
+MIT © [susheepks](https://github.com/susheepks)
