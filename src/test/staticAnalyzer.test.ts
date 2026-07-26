@@ -80,6 +80,30 @@ describe('StaticAnalyzer', () => {
         analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
       }).to.not.throw();
     });
+
+    it('getAllCandidatesInSeededProject returns candidates from multiple files', () => {
+      fs.writeFileSync(
+        path.join(workspaceDir, 'file1.ts'),
+        `export function funcOne() { return 1; }\n`
+      );
+      fs.writeFileSync(
+        path.join(workspaceDir, 'file2.ts'),
+        `export function funcTwo() { return 2; }\n`
+      );
+
+      const analyzer = new StaticAnalyzer();
+      analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
+
+      const allCandidates = analyzer.getAllCandidatesInSeededProject();
+      
+      const funcOne = allCandidates.find(c => c.candidate.name === 'funcOne');
+      const funcTwo = allCandidates.find(c => c.candidate.name === 'funcTwo');
+
+      expect(funcOne).to.exist;
+      expect(funcOne?.filePath.replace(/\\/g, '/')).to.include('/file1.ts');
+      expect(funcTwo).to.exist;
+      expect(funcTwo?.filePath.replace(/\\/g, '/')).to.include('/file2.ts');
+    });
   });
 
   it('flags a function with zero internal references', () => {

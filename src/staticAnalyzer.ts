@@ -113,6 +113,23 @@ export class StaticAnalyzer {
     this.seededRoots.clear();
   }
 
+  /**
+   * Returns a flat list of every candidate function across the entire seeded project.
+   * This is used for project-wide checks (e.g., duplicates, dashboard) without needing
+   * to re-parse or spawn a new ts-morph Project.
+   */
+  getAllCandidatesInSeededProject(): { filePath: string; candidate: SymbolCandidate }[] {
+    const results: { filePath: string; candidate: SymbolCandidate }[] = [];
+    for (const sourceFile of this.project.getSourceFiles()) {
+      const filePath = sourceFile.getFilePath();
+      const candidates = this.computeCandidates(sourceFile);
+      for (const candidate of candidates) {
+        results.push({ filePath, candidate });
+      }
+    }
+    return results;
+  }
+
   findCandidatesForDocument(
     absolutePath: string,
     text: string,
