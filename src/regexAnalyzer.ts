@@ -48,7 +48,7 @@ const LANGUAGE_CONFIGS: Record<string, LanguageConfig> = {
   // ── Java ────────────────────────────────────────────────────────────────────
   java: {
     symbolPattern:
-      /(?:(?:public|private|protected|static|final|synchronized|native|abstract)\s+)+(?:[\w<>\[\]]+\s+)+(\w+)\s*\(/gm,
+      /(?:(?:public|private|protected|static|final|synchronized|native|abstract)\s+)+(?:[\w<>[\]]+\s+)+(\w+)\s*\(/gm,
     nameGroup: 1,
     lifecycleNames: new Set([
       'main', 'toString', 'hashCode', 'equals', 'compareTo',
@@ -60,7 +60,7 @@ const LANGUAGE_CONFIGS: Record<string, LanguageConfig> = {
   // ── C# ──────────────────────────────────────────────────────────────────────
   csharp: {
     symbolPattern:
-      /(?:(?:public|private|protected|internal|static|virtual|override|async|abstract|sealed|new)\s+)+(?:[\w<>\[\]?,\s]+\s+)(\w+)\s*\(/gm,
+      /(?:(?:public|private|protected|internal|static|virtual|override|async|abstract|sealed|new)\s+)+(?:[\w<>[\]?,\s]+\s+)(\w+)\s*\(/gm,
     nameGroup: 1,
     lifecycleNames: new Set([
       'Main', 'ToString', 'GetHashCode', 'Equals', 'Dispose',

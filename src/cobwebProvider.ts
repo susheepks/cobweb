@@ -30,6 +30,7 @@ export class CobwebProvider implements vscode.CodeLensProvider {
   refresh(): void {
     this.gitAnalyzer.invalidateCache();
     this.regexAnalyzer.invalidateCache();
+    this.staticAnalyzer.invalidateCache();
     this._onDidChangeCodeLenses.fire();
   }
 
@@ -55,6 +56,20 @@ export class CobwebProvider implements vscode.CodeLensProvider {
     }
 
     const isAstLanguage = CobwebProvider.TS_LANGUAGES.has(document.languageId);
+
+    if (isAstLanguage) {
+      // BUGFIX: reference counts for TS/JS used to only cover files the user
+      // had personally opened in a tab, since that was the only way files
+      // ever entered the ts-morph Project. Seed the whole workspace root
+      // once (cheap on repeat calls) so a function called only from an
+      // unopened file is no longer misreported as having zero callers.
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+      if (workspaceFolder) {
+        const maxFiles = config.get<number>('maxFilesPerScan', 2000);
+        this.staticAnalyzer.seedWorkspaceIfNeeded(workspaceFolder.uri.fsPath, ignoreGlobs, maxFiles);
+      }
+    }
+
     let candidates;
     try {
       if (isAstLanguage) {

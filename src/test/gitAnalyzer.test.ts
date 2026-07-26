@@ -39,6 +39,34 @@ describe('GitAnalyzer (against a real temp git repo)', () => {
     expect(history.daysSinceLastModified).to.be.a('number');
   });
 
+  it('REGRESSION: commitCountTouchingSymbol is not capped at 5', async () => {
+    const filePath = path.join(repoDir, 'churny.ts');
+    // git's `-S<string>` pickaxe only matches commits where the number of
+    // OCCURRENCES of the string changes — editing a function's body while
+    // keeping its name present doesn't count as a new pickaxe hit. So to
+    // generate 7 genuine, independently-detectable commits we toggle the
+    // symbol's presence (added / removed / added / ...) rather than just
+    // editing its body — one more than the old hardcoded `-n 5` limit, which
+    // silently truncated commitCountTouchingSymbol on the pre-fix code path.
+    // NOTE: the "removed" placeholder text below must NOT itself contain the
+    // substring "churnFn", or the pickaxe occurrence count won't change and
+    // git will skip that commit too.
+    for (let i = 0; i < 7; i++) {
+      const present = i % 2 === 0;
+      fs.writeFileSync(
+        filePath,
+        present ? `function churnFn() { return ${i}; }\n` : `// symbol temporarily removed\n`
+      );
+      sh('git add churny.ts', repoDir);
+      sh(`git commit -q -m "toggle churnFn ${i}"`, repoDir);
+    }
+
+    const analyzer = new GitAnalyzer();
+    const history = await analyzer.getSymbolHistory(filePath, 'churnFn');
+
+    expect(history.commitCountTouchingSymbol).to.equal(7);
+  });
+
   it('reports fileTrackedByGit=false for an untracked file', async () => {
     const filePath = path.join(repoDir, 'untracked.ts');
     fs.writeFileSync(filePath, 'function neverCommitted() {}\n');

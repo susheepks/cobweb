@@ -1,7 +1,87 @@
 import { expect } from 'chai';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { StaticAnalyzer } from '../staticAnalyzer';
 
 describe('StaticAnalyzer', () => {
+  describe('seedWorkspaceIfNeeded (project-wide references)', () => {
+    let workspaceDir: string;
+
+    beforeEach(() => {
+      workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cobweb-workspace-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    });
+
+    it('REGRESSION: finds a caller that lives in a file the user never opened', () => {
+      // helper.ts is never passed through findCandidatesForDocument() below —
+      // it only exists on disk. Before the fix, the ts-morph Project never
+      // saw this file, so helperFn's caller in caller.ts was invisible and
+      // helperFn was misreported as having zero references.
+      fs.writeFileSync(
+        path.join(workspaceDir, 'helper.ts'),
+        `export function helperFn() { return 1; }\n`
+      );
+      fs.writeFileSync(
+        path.join(workspaceDir, 'caller.ts'),
+        `import { helperFn } from './helper';\nhelperFn();\n`
+      );
+
+      const analyzer = new StaticAnalyzer();
+      analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
+
+      // The ONLY document ever explicitly analyzed is helper.ts — caller.ts
+      // is only on disk, standing in for "a file the user hasn't opened".
+      const candidates = analyzer.findCandidatesForDocument(
+        path.join(workspaceDir, 'helper.ts'),
+        fs.readFileSync(path.join(workspaceDir, 'helper.ts'), 'utf8'),
+        1
+      );
+
+      const helperFn = candidates.find((c) => c.name === 'helperFn');
+      // Before the fix this was 0. ts-morph counts both the import specifier
+      // and the call site, so a single cross-file caller reports as >= 1.
+      expect(helperFn?.referenceCountInProject).to.be.greaterThan(0);
+    });
+
+    it('respects ignoreGlobs so excluded files are not silently counted as callers', () => {
+      fs.writeFileSync(
+        path.join(workspaceDir, 'helper.ts'),
+        `export function helperFn() { return 1; }\n`
+      );
+      fs.mkdirSync(path.join(workspaceDir, 'dist'));
+      fs.writeFileSync(
+        path.join(workspaceDir, 'dist', 'bundled.ts'),
+        `import { helperFn } from '../helper';\nhelperFn();\n`
+      );
+
+      const analyzer = new StaticAnalyzer();
+      analyzer.seedWorkspaceIfNeeded(workspaceDir, ['**/dist/**'], 2000);
+
+      const candidates = analyzer.findCandidatesForDocument(
+        path.join(workspaceDir, 'helper.ts'),
+        fs.readFileSync(path.join(workspaceDir, 'helper.ts'), 'utf8'),
+        1
+      );
+
+      const helperFn = candidates.find((c) => c.name === 'helperFn');
+      expect(helperFn?.referenceCountInProject).to.equal(0);
+    });
+
+    it('is idempotent — seeding the same root twice does not throw or duplicate files', () => {
+      fs.writeFileSync(path.join(workspaceDir, 'a.ts'), `export function a() {}\n`);
+
+      const analyzer = new StaticAnalyzer();
+      expect(() => {
+        analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
+        analyzer.seedWorkspaceIfNeeded(workspaceDir, [], 2000);
+      }).to.not.throw();
+    });
+  });
+
   it('flags a function with zero internal references', () => {
     const analyzer = new StaticAnalyzer();
     const code = `
