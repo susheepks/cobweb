@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { minimatch } from 'minimatch';
 import { GitAnalyzer } from './gitAnalyzer';
 import { StaticAnalyzer } from './staticAnalyzer';
+import { RegexAnalyzer } from './regexAnalyzer';
 
 export class CobwebProvider implements vscode.CodeLensProvider {
   private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -9,6 +10,12 @@ export class CobwebProvider implements vscode.CodeLensProvider {
 
   private gitAnalyzer = new GitAnalyzer();
   private staticAnalyzer = new StaticAnalyzer();
+  private regexAnalyzer = new RegexAnalyzer();
+
+  /** Language IDs handled by the TypeScript/JavaScript AST-based analyzer. */
+  private static readonly TS_LANGUAGES = new Set([
+    'typescript', 'typescriptreact', 'javascript', 'javascriptreact',
+  ]);
   private diagnosticsChannel: vscode.OutputChannel;
   private warnedShallowRepos = new Set<string>();
 
@@ -22,6 +29,7 @@ export class CobwebProvider implements vscode.CodeLensProvider {
    *  updates already happen automatically via document-version/mtime keys. */
   refresh(): void {
     this.gitAnalyzer.invalidateCache();
+    this.regexAnalyzer.invalidateCache();
     this._onDidChangeCodeLenses.fire();
   }
 
@@ -46,13 +54,23 @@ export class CobwebProvider implements vscode.CodeLensProvider {
       return [];
     }
 
+    const isAstLanguage = CobwebProvider.TS_LANGUAGES.has(document.languageId);
     let candidates;
     try {
-      candidates = this.staticAnalyzer.findCandidatesForDocument(
-        document.uri.fsPath,
-        document.getText(),
-        document.version
-      );
+      if (isAstLanguage) {
+        candidates = this.staticAnalyzer.findCandidatesForDocument(
+          document.uri.fsPath,
+          document.getText(),
+          document.version
+        );
+      } else {
+        candidates = this.regexAnalyzer.findCandidatesForDocument(
+          document.uri.fsPath,
+          document.getText(),
+          document.languageId,
+          document.version
+        );
+      }
     } catch (err) {
       this.diagnosticsChannel.appendLine(`Parse skipped for ${relPath}: ${(err as Error).message}`);
       return [];
@@ -88,9 +106,10 @@ export class CobwebProvider implements vscode.CodeLensProvider {
       const isStale =
         history.daysSinceLastModified !== null && history.daysSinceLastModified >= staleAfterDays;
 
+      const refLabel = isAstLanguage ? 'no internal callers' : '0 in-file refs';
       const severityLabel =
         candidate.isExported && respectExports
-          ? '📦 Exported, no internal callers'
+          ? `📦 Exported, ${refLabel}`
           : '⚠️ Possibly dead code';
 
       const dateInfo = history.lastModifiedISO

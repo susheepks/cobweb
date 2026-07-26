@@ -1,8 +1,8 @@
 {
   "name": "cobweb",
   "displayName": "Cobweb — Git-Based Dead Code Detector",
-  "description": "Flags functions that are likely dead or stale using git history and static reference analysis. No servers, no telemetry, 100% local.",
-  "version": "0.2.0",
+  "description": "Flags dead and stale functions using git history + static analysis. Supports 20 languages: TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, and more. No servers, no telemetry, 100% local.",
+  "version": "0.3.0",
   "publisher": "susheepks",
   "engines": {
     "vscode": "^1.85.0"
@@ -16,13 +16,34 @@
     "git",
     "refactoring",
     "static analysis",
-    "codelens"
+    "codelens",
+    "python",
+    "go",
+    "rust",
+    "java",
+    "multi-language"
   ],
   "activationEvents": [
     "onLanguage:typescript",
     "onLanguage:typescriptreact",
     "onLanguage:javascript",
-    "onLanguage:javascriptreact"
+    "onLanguage:javascriptreact",
+    "onLanguage:python",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:java",
+    "onLanguage:csharp",
+    "onLanguage:php",
+    "onLanguage:ruby",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:swift",
+    "onLanguage:kotlin",
+    "onLanguage:sql",
+    "onLanguage:vue",
+    "onLanguage:shellscript",
+    "onLanguage:dart",
+    "onLanguage:scala"
   ],
   "main": "./dist/extension.js",
   "contributes": {

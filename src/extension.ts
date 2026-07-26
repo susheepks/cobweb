@@ -5,10 +5,28 @@ export function activate(context: vscode.ExtensionContext) {
   const provider = new CobwebProvider(context);
 
   const selector: vscode.DocumentSelector = [
-    { language: 'typescript', scheme: 'file' },
+    // ── TypeScript / JavaScript (AST-based analysis) ──
+    { language: 'typescript',      scheme: 'file' },
     { language: 'typescriptreact', scheme: 'file' },
-    { language: 'javascript', scheme: 'file' },
+    { language: 'javascript',      scheme: 'file' },
     { language: 'javascriptreact', scheme: 'file' },
+    // ── Additional languages (regex-based analysis) ───
+    { language: 'python',          scheme: 'file' },
+    { language: 'go',              scheme: 'file' },
+    { language: 'rust',            scheme: 'file' },
+    { language: 'java',            scheme: 'file' },
+    { language: 'csharp',          scheme: 'file' },
+    { language: 'php',             scheme: 'file' },
+    { language: 'ruby',            scheme: 'file' },
+    { language: 'c',               scheme: 'file' },
+    { language: 'cpp',             scheme: 'file' },
+    { language: 'swift',           scheme: 'file' },
+    { language: 'kotlin',          scheme: 'file' },
+    { language: 'sql',             scheme: 'file' },
+    { language: 'vue',             scheme: 'file' },
+    { language: 'shellscript',     scheme: 'file' },
+    { language: 'dart',            scheme: 'file' },
+    { language: 'scala',           scheme: 'file' },
   ];
 
   context.subscriptions.push(
