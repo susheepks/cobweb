@@ -45,6 +45,7 @@ Every codebase accumulates functions that used to matter and quietly stopped bei
 - 🏷️ **Smart export awareness** — treats exported functions differently, since they may have external callers
 - 🧬 **Duplicate detection (TS/JS only)** — flags functions with nearly identical structural logic anywhere in the project, ignoring variable names and whitespace
 - 📊 **Project-wide dashboard** — one-command view of every zero-ref function across all files, with filtering, sorting, and duplicate highlights
+- 📋 **AI cleanup prompt** — one-click to copy a structured Markdown prompt (name, file, git history, source snippet, and review questions) to your clipboard, ready to paste into any AI chat
 - ⚡ **Incremental caching** — results are cached per file version; re-runs only when code actually changes
 - 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
 - 🔒 **Privacy first** — zero network calls, zero data collection
@@ -102,6 +103,15 @@ Cobweb **couldn't count references** for this function (a complex expression the
 - Treat this as a hint, not a verdict
 - Check manually whether the function is called anywhere
 
+### `📋 Copy AI cleanup prompt`
+A second inline CodeLens button that appears next to every flagged function. Click it to copy a structured Markdown prompt to your clipboard. The prompt includes:
+- The function’s name, file path, reference count, and export status
+- Its git history (last touched, by whom, how many days ago)
+- The first ~50 lines of the function’s source code
+- Four specific review questions for an AI (dead or live? what did it do? how to refactor? etc.)
+
+Paste it into any AI chat (ChatGPT, Claude, Gemini, Copilot Chat, etc.) to get an instant second opinion.
+
 ### `🧬 Similar to <name> in <relative path> · review for duplication`
 Cobweb found another function in the project that has the exact same control flow and parameter count, and its structural body (ignoring variable names) matches within a small length tolerance.
 - Only fires for TS/JS functions with at least 3 statements (trivial getters are ignored).
@@ -158,6 +168,7 @@ Run these from the Command Palette (`Cmd/Ctrl+Shift+P`):
 | `Cobweb: Refresh Analysis` | Clears all caches and re-runs analysis on open files |
 | `Cobweb: Show Details for Symbol` | Opens a detail popup with full git + reference info for a symbol |
 | `Cobweb: Show Project Dashboard` | Opens a project-wide webview panel listing every zero-ref function, sortable and filterable by name, file, age, author, and duplicate status |
+| `Cobweb: Copy AI Cleanup Prompt for Symbol` | Triggered via the inline `📋 Copy AI cleanup prompt` CodeLens; copies a ready-to-paste Markdown prompt to the clipboard |
 
 ## What Cobweb Does NOT Claim
 

@@ -62,6 +62,59 @@ export function activate(context: vscode.ExtensionContext) {
       DashboardPanel.show(provider.staticAnalyzer, provider.duplicateAnalyzer, provider.gitAnalyzer, config, ignoreGlobs);
     }),
 
+    vscode.commands.registerCommand(
+      'cobweb.copyCleanupPrompt',
+      async (uri: vscode.Uri, symbolName: string, history: any, candidate: any) => {
+        const relPath = vscode.workspace.asRelativePath(uri);
+        const refCount = candidate.referenceCountInProject;
+        const isExported = candidate.isExported ? 'yes' : 'no';
+        const gitLine = history.lastModifiedISO
+          ? `Last touched ${history.daysSinceLastModified} day(s) ago by ${history.lastAuthor ?? 'unknown'} (${new Date(history.lastModifiedISO).toLocaleDateString()})`
+          : history.repoUsable
+          ? 'No git history found for this function'
+          : 'Git history unavailable';
+
+        // Grab the source text for the function from the open document (best-effort)
+        let snippetBlock = '';
+        try {
+          const doc = await vscode.workspace.openTextDocument(uri);
+          const startLine = Math.max(0, candidate.startLine - 1);
+          const endLine = Math.min(doc.lineCount - 1, candidate.startLine + 49); // up to 50 lines
+          const lines: string[] = [];
+          for (let i = startLine; i <= endLine; i++) {
+            lines.push(doc.lineAt(i).text);
+          }
+          snippetBlock = `\n\nFunction source (first ~50 lines from line ${candidate.startLine}):\n\`\`\`\n${lines.join('\n')}\n\`\`\``;
+        } catch {
+          // Non-fatal — prompt is still useful without the snippet
+        }
+
+        const prompt = [
+          `# Cobweb Dead-Code Review: \`${symbolName}\``,
+          '',
+          `I'm reviewing a function flagged by the Cobweb VS Code extension as possibly dead code.`,
+          `Please help me decide what to do with it.`,
+          '',
+          '## Function Details',
+          `- **Name:** \`${symbolName}\``,
+          `- **File:** \`${relPath}\``,
+          `- **Internal callers found:** ${refCount === -1 ? 'unknown (analysis failed)' : refCount}`,
+          `- **Exported:** ${isExported}`,
+          `- **Git history:** ${gitLine}`,
+          '',
+          '## Questions for you',
+          '1. Based on the source, can you tell if this function is genuinely dead, or might it be called dynamically (e.g. via string dispatch, framework convention, or reflection)?',
+          '2. If it IS dead, suggest a one-line summary of what it did so I can write a useful commit message when I delete it.',
+          '3. If it is NOT dead, explain why and what I should do instead (add a call-site reference, add a test, etc.).',
+          '4. If it is similar to other functions in the codebase, suggest how it could be refactored into a shared utility.',
+          snippetBlock,
+        ].join('\n');
+
+        await vscode.env.clipboard.writeText(prompt);
+        vscode.window.showInformationMessage(`📋 Cleanup prompt for \`${symbolName}\` copied to clipboard.`);
+      }
+    ),
+
     // Save always triggers a full cache invalidation + refresh, since git
     // history can only meaningfully change after a commit/save-adjacent event.
     vscode.workspace.onDidSaveTextDocument(() => provider.refresh()),

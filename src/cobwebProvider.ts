@@ -156,6 +156,11 @@ export class CobwebProvider implements vscode.CodeLensProvider {
           title: `${severityLabel} · ${dateInfo}${staleTag}`,
           command: 'cobweb.showDetails',
           arguments: [document.uri, candidate.name, history, candidate],
+        }),
+        new vscode.CodeLens(range, {
+          title: '📋 Copy AI cleanup prompt',
+          command: 'cobweb.copyCleanupPrompt',
+          arguments: [document.uri, candidate.name, history, candidate],
         })
       );
     }

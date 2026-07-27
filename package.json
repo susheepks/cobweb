@@ -59,6 +59,10 @@
       {
         "command": "cobweb.showDashboard",
         "title": "Cobweb: Show Project Dashboard"
+      },
+      {
+        "command": "cobweb.copyCleanupPrompt",
+        "title": "Cobweb: Copy AI Cleanup Prompt for Symbol"
       }
     ],
     "configuration": {
