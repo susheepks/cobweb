@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CobwebProvider } from './cobwebProvider';
+import { DashboardPanel } from './dashboardPanel';
 
 export function activate(context: vscode.ExtensionContext) {
   const provider = new CobwebProvider(context);
@@ -54,6 +55,12 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(lines.join('\n'), { modal: true });
       }
     ),
+
+    vscode.commands.registerCommand('cobweb.showDashboard', () => {
+      const config = vscode.workspace.getConfiguration('cobweb');
+      const ignoreGlobs = config.get<string[]>('ignoreGlobs', []);
+      DashboardPanel.show(provider.staticAnalyzer, provider.duplicateAnalyzer, provider.gitAnalyzer, config, ignoreGlobs);
+    }),
 
     // Save always triggers a full cache invalidation + refresh, since git
     // history can only meaningfully change after a commit/save-adjacent event.

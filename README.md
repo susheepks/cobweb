@@ -44,6 +44,7 @@ Every codebase accumulates functions that used to matter and quietly stopped bei
 - 👤 **Author attribution** — shows who last modified the function
 - 🏷️ **Smart export awareness** — treats exported functions differently, since they may have external callers
 - 🧬 **Duplicate detection (TS/JS only)** — flags functions with nearly identical structural logic anywhere in the project, ignoring variable names and whitespace
+- 📊 **Project-wide dashboard** — one-command view of every zero-ref function across all files, with filtering, sorting, and duplicate highlights
 - ⚡ **Incremental caching** — results are cached per file version; re-runs only when code actually changes
 - 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
 - 🔒 **Privacy first** — zero network calls, zero data collection
@@ -156,6 +157,7 @@ Run these from the Command Palette (`Cmd/Ctrl+Shift+P`):
 |---|---|
 | `Cobweb: Refresh Analysis` | Clears all caches and re-runs analysis on open files |
 | `Cobweb: Show Details for Symbol` | Opens a detail popup with full git + reference info for a symbol |
+| `Cobweb: Show Project Dashboard` | Opens a project-wide webview panel listing every zero-ref function, sortable and filterable by name, file, age, author, and duplicate status |
 
 ## What Cobweb Does NOT Claim
 

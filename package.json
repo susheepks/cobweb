@@ -55,6 +55,10 @@
       {
         "command": "cobweb.showDetails",
         "title": "Cobweb: Show Details for Symbol"
+      },
+      {
+        "command": "cobweb.showDashboard",
+        "title": "Cobweb: Show Project Dashboard"
       }
     ],
     "configuration": {

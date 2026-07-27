@@ -9,10 +9,10 @@ export class CobwebProvider implements vscode.CodeLensProvider {
   private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
   public readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
 
-  private gitAnalyzer = new GitAnalyzer();
-  private staticAnalyzer = new StaticAnalyzer();
+  public gitAnalyzer = new GitAnalyzer();
+  public staticAnalyzer = new StaticAnalyzer();
   private regexAnalyzer = new RegexAnalyzer();
-  private duplicateAnalyzer = new DuplicateAnalyzer();
+  public duplicateAnalyzer = new DuplicateAnalyzer();
 
   /** Language IDs handled by the TypeScript/JavaScript AST-based analyzer. */
   private static readonly TS_LANGUAGES = new Set([
