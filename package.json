@@ -84,6 +84,16 @@
           "type": "number",
           "default": 2000,
           "description": "Safety cap on number of files analyzed per workspace scan, to avoid pathological performance on huge monorepos."
+        },
+        "cobweb.detectDuplicates": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, flags functions across the project that have nearly identical normalized logic."
+        },
+        "cobweb.duplicateBodyLengthTolerance": {
+          "type": "number",
+          "default": 0.15,
+          "description": "Allowed length difference ratio between normalized duplicate function bodies (e.g. 0.15 means up to 15% difference)."
         }
       }
     }

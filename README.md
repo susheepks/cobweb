@@ -43,6 +43,7 @@ Every codebase accumulates functions that used to matter and quietly stopped bei
 - 📅 **Git-backed staleness** — shows how many days ago a function was last touched
 - 👤 **Author attribution** — shows who last modified the function
 - 🏷️ **Smart export awareness** — treats exported functions differently, since they may have external callers
+- 🧬 **Duplicate detection (TS/JS only)** — flags functions with nearly identical structural logic anywhere in the project, ignoring variable names and whitespace
 - ⚡ **Incremental caching** — results are cached per file version; re-runs only when code actually changes
 - 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
 - 🔒 **Privacy first** — zero network calls, zero data collection
@@ -100,6 +101,12 @@ Cobweb **couldn't count references** for this function (a complex expression the
 - Treat this as a hint, not a verdict
 - Check manually whether the function is called anywhere
 
+### `🧬 Similar to <name> in <relative path> · review for duplication`
+Cobweb found another function in the project that has the exact same control flow and parameter count, and its structural body (ignoring variable names) matches within a small length tolerance.
+- Only fires for TS/JS functions with at least 3 statements (trivial getters are ignored).
+- Does not flag framework lifecycle methods (e.g. `render`, `ngOnInit`).
+- **Action:** Consider refactoring to a shared utility.
+
 ### `· stale` suffix
 Appended to any label when the function hasn't been touched for more than `cobweb.staleAfterDays` (default **180 days**). A zero-ref function that is also stale is the strongest dead-code signal Cobweb can give you.
 
@@ -138,6 +145,8 @@ Set these in your VS Code `settings.json`:
 | `cobweb.ignoreGlobs` | `["**/node_modules/**", "**/dist/**", "**/*.test.*", "**/*.spec.*"]` | File patterns to skip |
 | `cobweb.respectExports` | `true` | Show `📦 Exported` label instead of `⚠️` for exported symbols |
 | `cobweb.maxFilesPerScan` | `2000` | Safety cap on files analyzed per scan (protects monorepos) |
+| `cobweb.detectDuplicates` | `true` | Enable/disable structural duplicate detection (TS/JS only) |
+| `cobweb.duplicateBodyLengthTolerance` | `0.15` | Allowed difference ratio between duplicate bodies (e.g. `0.15` = 15% difference) |
 
 ## Commands
 

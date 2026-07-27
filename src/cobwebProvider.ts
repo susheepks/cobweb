@@ -3,6 +3,7 @@ import { minimatch } from 'minimatch';
 import { GitAnalyzer } from './gitAnalyzer';
 import { StaticAnalyzer } from './staticAnalyzer';
 import { RegexAnalyzer } from './regexAnalyzer';
+import { DuplicateAnalyzer } from './duplicateAnalyzer';
 
 export class CobwebProvider implements vscode.CodeLensProvider {
   private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -11,6 +12,7 @@ export class CobwebProvider implements vscode.CodeLensProvider {
   private gitAnalyzer = new GitAnalyzer();
   private staticAnalyzer = new StaticAnalyzer();
   private regexAnalyzer = new RegexAnalyzer();
+  private duplicateAnalyzer = new DuplicateAnalyzer();
 
   /** Language IDs handled by the TypeScript/JavaScript AST-based analyzer. */
   private static readonly TS_LANGUAGES = new Set([
@@ -31,6 +33,7 @@ export class CobwebProvider implements vscode.CodeLensProvider {
     this.gitAnalyzer.invalidateCache();
     this.regexAnalyzer.invalidateCache();
     this.staticAnalyzer.invalidateCache();
+    this.duplicateAnalyzer.invalidateCache();
     this._onDidChangeCodeLenses.fire();
   }
 
@@ -43,6 +46,8 @@ export class CobwebProvider implements vscode.CodeLensProvider {
     const staleAfterDaysRaw = config.get<number>('staleAfterDays', 180);
     const staleAfterDays = Number.isFinite(staleAfterDaysRaw) && staleAfterDaysRaw > 0 ? staleAfterDaysRaw : 180;
     const respectExports = config.get<boolean>('respectExports', true);
+    const detectDuplicates = config.get<boolean>('detectDuplicates', true);
+    const duplicateBodyLengthTolerance = config.get<number>('duplicateBodyLengthTolerance', 0.15);
 
     const relPath = vscode.workspace.asRelativePath(document.uri, false);
     if (ignoreGlobs.some((glob) => minimatch(relPath, glob))) {
@@ -153,6 +158,33 @@ export class CobwebProvider implements vscode.CodeLensProvider {
           arguments: [document.uri, candidate.name, history, candidate],
         })
       );
+    }
+    
+    if (isAstLanguage && detectDuplicates) {
+      if (!this.duplicateAnalyzer.hasCachedResults()) {
+        const allProjectCandidates = this.staticAnalyzer.getAllCandidatesInSeededProject();
+        this.duplicateAnalyzer.findSimilarFunctions(allProjectCandidates, duplicateBodyLengthTolerance);
+      }
+      
+      const normalizedFilePath = document.uri.fsPath.replace(/\\/g, '/');
+      
+      for (const candidate of candidates) {
+        const key = `${normalizedFilePath}::${candidate.name}`;
+        const similarFuncs = this.duplicateAnalyzer.getSimilarFunctions(key);
+        if (similarFuncs && similarFuncs.length > 0) {
+          const firstSim = similarFuncs[0];
+          const similarRelPath = vscode.workspace.asRelativePath(firstSim.similarToFile, false);
+          
+          const range = new vscode.Range(candidate.startLine - 1, 0, candidate.startLine - 1, 0);
+          lenses.push(
+            new vscode.CodeLens(range, {
+              title: `🧬 Similar to ${firstSim.similarToName} in ${similarRelPath} · review for duplication`,
+              command: '',
+              arguments: []
+            })
+          );
+        }
+      }
     }
 
     return lenses;
