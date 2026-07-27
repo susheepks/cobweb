@@ -46,6 +46,7 @@ Every codebase accumulates functions that used to matter and quietly stopped bei
 - 🧬 **Duplicate detection (TS/JS only)** — flags functions with nearly identical structural logic anywhere in the project, ignoring variable names and whitespace
 - 📊 **Project-wide dashboard** — one-command view of every zero-ref function across all files, with filtering, sorting, and duplicate highlights
 - 📋 **AI cleanup prompt** — one-click to copy a structured Markdown prompt (name, file, git history, source snippet, and review questions) to your clipboard, ready to paste into any AI chat
+- 🕸️ **Whole-file orphan detection** — detects when every single function in a TS/JS file has zero internal callers, showing a file-level CodeLens banner and a command to get an AI-ready summary
 - ⚡ **Incremental caching** — results are cached per file version; re-runs only when code actually changes
 - 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
 - 🔒 **Privacy first** — zero network calls, zero data collection
@@ -169,6 +170,7 @@ Run these from the Command Palette (`Cmd/Ctrl+Shift+P`):
 | `Cobweb: Show Details for Symbol` | Opens a detail popup with full git + reference info for a symbol |
 | `Cobweb: Show Project Dashboard` | Opens a project-wide webview panel listing every zero-ref function, sortable and filterable by name, file, age, author, and duplicate status |
 | `Cobweb: Copy AI Cleanup Prompt for Symbol` | Triggered via the inline `📋 Copy AI cleanup prompt` CodeLens; copies a ready-to-paste Markdown prompt to the clipboard |
+| `Cobweb: Check File for Whole-File Orphan` | Checks the active TS/JS file: if every function has zero callers, reports it as a whole-file orphan and optionally copies an AI review prompt |
 
 ## What Cobweb Does NOT Claim
 

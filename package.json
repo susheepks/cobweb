@@ -63,6 +63,10 @@
       {
         "command": "cobweb.copyCleanupPrompt",
         "title": "Cobweb: Copy AI Cleanup Prompt for Symbol"
+      },
+      {
+        "command": "cobweb.checkFileForOrphans",
+        "title": "Cobweb: Check File for Whole-File Orphan"
       }
     ],
     "configuration": {

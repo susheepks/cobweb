@@ -4,6 +4,7 @@ import { GitAnalyzer } from './gitAnalyzer';
 import { StaticAnalyzer } from './staticAnalyzer';
 import { RegexAnalyzer } from './regexAnalyzer';
 import { DuplicateAnalyzer } from './duplicateAnalyzer';
+import { OrphanAnalyzer } from './orphanAnalyzer';
 
 export class CobwebProvider implements vscode.CodeLensProvider {
   private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -189,6 +190,24 @@ export class CobwebProvider implements vscode.CodeLensProvider {
             })
           );
         }
+      }
+    }
+
+    // ── Whole-file orphan detection ──────────────────────────────────────────
+    // If every function in this TS/JS file has zero callers, add a prominent
+    // file-level lens at line 1 so the user doesn't have to scroll to notice.
+    if (isAstLanguage && candidates.length > 0) {
+      const orphanAnalyzer = new OrphanAnalyzer();
+      const orphanResult = orphanAnalyzer.analyzeFile(candidates, document.uri.fsPath);
+      if (orphanResult.isOrphanFile) {
+        const fileRange = new vscode.Range(0, 0, 0, 0);
+        lenses.push(
+          new vscode.CodeLens(fileRange, {
+            title: `🕸️ Whole-file orphan: all ${orphanResult.total} function(s) have zero internal callers`,
+            command: 'cobweb.checkFileForOrphans',
+            arguments: [],
+          })
+        );
       }
     }
 

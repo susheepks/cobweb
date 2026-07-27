@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CobwebProvider } from './cobwebProvider';
 import { DashboardPanel } from './dashboardPanel';
+import { OrphanAnalyzer } from './orphanAnalyzer';
 
 export function activate(context: vscode.ExtensionContext) {
   const provider = new CobwebProvider(context);
@@ -114,6 +115,82 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(`📋 Cleanup prompt for \`${symbolName}\` copied to clipboard.`);
       }
     ),
+
+    vscode.commands.registerCommand('cobweb.checkFileForOrphans', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showWarningMessage('Cobweb: No active file open.');
+        return;
+      }
+
+      const document = editor.document;
+      const tsLanguages = new Set(['typescript', 'typescriptreact', 'javascript', 'javascriptreact']);
+      if (!tsLanguages.has(document.languageId)) {
+        vscode.window.showWarningMessage('Cobweb: Whole-file orphan detection only works on TypeScript/JavaScript files.');
+        return;
+      }
+
+      const config = vscode.workspace.getConfiguration('cobweb');
+      const ignoreGlobs = config.get<string[]>('ignoreGlobs', []);
+      const maxFiles = config.get<number>('maxFilesPerScan', 2000);
+
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+      if (workspaceFolder) {
+        provider.staticAnalyzer.seedWorkspaceIfNeeded(workspaceFolder.uri.fsPath, ignoreGlobs, maxFiles);
+      }
+
+      const candidates = provider.staticAnalyzer.findCandidatesForDocument(
+        document.uri.fsPath,
+        document.getText(),
+        document.version
+      );
+
+      const orphanAnalyzer = new OrphanAnalyzer();
+      const result = orphanAnalyzer.analyzeFile(candidates, document.uri.fsPath);
+      const relPath = vscode.workspace.asRelativePath(document.uri);
+
+      if (result.total === 0) {
+        vscode.window.showInformationMessage(`Cobweb: No functions found in ${relPath}.`);
+        return;
+      }
+
+      if (result.isOrphanFile) {
+        vscode.window.showWarningMessage(
+          `🕸️ Whole-file orphan: all ${result.total} function(s) in ${relPath} have zero internal callers. Consider deleting the entire file.`,
+          'Copy AI Prompt'
+        ).then(choice => {
+          if (choice === 'Copy AI Prompt') {
+            const prompt = [
+              `# Cobweb Whole-File Orphan Review: \`${relPath}\``,
+              '',
+              `The Cobweb extension reports that EVERY function in this file has zero internal callers.`,
+              `This suggests the entire module may be dead code and safe to delete.`,
+              '',
+              `## File Stats`,
+              `- Total functions: ${result.total}`,
+              `- Zero-ref functions: ${result.zeroRef}`,
+              `- Unknown-ref functions: ${result.unknownRef}`,
+              '',
+              '## Questions',
+              '1. Is this file genuinely unused, or might it be imported dynamically or used as a CLI entry point?',
+              '2. Is there any test file that exercises these functions? If so, the test file itself might also be orphaned.',
+              '3. If safe to delete, what is a good single-line commit message for the deletion?',
+            ].join('\n');
+            vscode.env.clipboard.writeText(prompt).then(() => {
+              vscode.window.showInformationMessage('Cobweb: Whole-file orphan prompt copied to clipboard.');
+            });
+          }
+        });
+      } else {
+        const calledList = result.functionsWithCallers.slice(0, 5).join(', ');
+        const more = result.functionsWithCallers.length > 5
+          ? ` (+${result.functionsWithCallers.length - 5} more)`
+          : '';
+        vscode.window.showInformationMessage(
+          `Cobweb: ${relPath} is NOT a whole-file orphan — ${result.calledRef} function(s) still have callers: ${calledList}${more}.`
+        );
+      }
+    }),
 
     // Save always triggers a full cache invalidation + refresh, since git
     // history can only meaningfully change after a commit/save-adjacent event.
