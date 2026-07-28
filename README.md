@@ -1,5 +1,7 @@
 # 🕸️ Cobweb — Git-Based Dead Code Detector
 
+[![VS Code](https://img.shields.io/badge/VS%20Code-Fully%20Supported-blue?logo=visualstudiocode)](#) [![Cursor](https://img.shields.io/badge/Cursor-Fully%20Supported-black)](#) [![Windsurf](https://img.shields.io/badge/Windsurf-Supported-blue)](#) [![Remote/SSH](https://img.shields.io/badge/Remote%2FSSH-Fully%20Supported-green)](#)
+
 > **Find functions nobody calls. Know when they were last touched. Decide if they should go.**
 
 Cobweb is a VS Code extension that sits quietly in your editor and flags **stale, possibly dead functions** by combining two signals:
@@ -15,6 +17,7 @@ Everything runs **100% locally** against the repo already open in your editor �
 
 - [Why Cobweb](#why-cobweb)
 - [Features](#features)
+- [Compatibility](#compatibility)
 - [How It Works](#how-it-works)
 - [Installation](#installation)
 - [Reading the CodeLens Labels](#reading-the-codelens-labels)
@@ -50,6 +53,12 @@ Every codebase accumulates functions that used to matter and quietly stopped bei
 - ⚡ **Incremental caching** — results are cached per file version; re-runs only when code actually changes
 - 🌐 **20 languages supported** — TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, Shell, Dart, Scala, and more
 - 🔒 **Privacy first** — zero network calls, zero data collection
+
+## Compatibility
+
+Cobweb is fully supported in **VS Code**, **Cursor**, **Windsurf**, and **Remote / SSH / Dev Container** environments.
+
+See the full **[Editor Compatibility Guide](COMPATIBILITY.md)** for details, including minor clipboard caveats in Windsurf.
 
 ## How It Works
 
