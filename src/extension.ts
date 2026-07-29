@@ -146,7 +146,10 @@ export function activate(context: vscode.ExtensionContext) {
       );
 
       const orphanAnalyzer = new OrphanAnalyzer();
-      const result = orphanAnalyzer.analyzeFile(candidates, document.uri.fsPath);
+      const entryPointGlobs = config.get<string[]>('entryPointGlobs', [
+        '**/extension.ts', '**/index.ts', '**/main.ts', '**/server.ts', '**/app.ts'
+      ]);
+      const result = orphanAnalyzer.analyzeFile(candidates, document.uri.fsPath, entryPointGlobs);
       const relPath = vscode.workspace.asRelativePath(document.uri);
 
       if (result.total === 0) {

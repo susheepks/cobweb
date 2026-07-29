@@ -107,6 +107,17 @@
           "type": "number",
           "default": 0.15,
           "description": "Allowed length difference ratio between normalized duplicate function bodies (e.g. 0.15 means up to 15% difference)."
+        },
+        "cobweb.entryPointGlobs": {
+          "type": "array",
+          "default": [
+            "**/extension.ts",
+            "**/index.ts",
+            "**/main.ts",
+            "**/server.ts",
+            "**/app.ts"
+          ],
+          "description": "Glob patterns for files that are invoked by a host/framework (e.g. VS Code, Node.js) rather than by internal callers. Files matching these patterns are excluded from whole-file orphan detection, since their exported entry-point functions will always show zero internal refs."
         }
       }
     }

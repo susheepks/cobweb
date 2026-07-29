@@ -49,6 +49,9 @@ export class CobwebProvider implements vscode.CodeLensProvider {
     const respectExports = config.get<boolean>('respectExports', true);
     const detectDuplicates = config.get<boolean>('detectDuplicates', true);
     const duplicateBodyLengthTolerance = config.get<number>('duplicateBodyLengthTolerance', 0.15);
+    const entryPointGlobs = config.get<string[]>('entryPointGlobs', [
+      '**/extension.ts', '**/index.ts', '**/main.ts', '**/server.ts', '**/app.ts'
+    ]);
 
     const relPath = vscode.workspace.asRelativePath(document.uri, false);
     if (ignoreGlobs.some((glob) => minimatch(relPath, glob))) {
@@ -198,7 +201,7 @@ export class CobwebProvider implements vscode.CodeLensProvider {
     // file-level lens at line 1 so the user doesn't have to scroll to notice.
     if (isAstLanguage && candidates.length > 0) {
       const orphanAnalyzer = new OrphanAnalyzer();
-      const orphanResult = orphanAnalyzer.analyzeFile(candidates, document.uri.fsPath);
+      const orphanResult = orphanAnalyzer.analyzeFile(candidates, document.uri.fsPath, entryPointGlobs);
       if (orphanResult.isOrphanFile) {
         const fileRange = new vscode.Range(0, 0, 0, 0);
         lenses.push(

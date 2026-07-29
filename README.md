@@ -190,6 +190,7 @@ Run these from the Command Palette (`Cmd/Ctrl+Shift+P`):
 - **Framework conventions** — lifecycle methods invoked by React, Angular, Vue, NestJS, etc. (a common list is pre-excluded; extend `ignoreGlobs` for your framework)
 - **Test-only usage** — if test files are excluded via `ignoreGlobs` (the default)
 - **Cross-file references in non-TS languages** — regex-based languages only count in-file references
+- **Whole-file orphan detection is function-scoped only** — a file whose exports are entirely classes, constants, types, interfaces, or barrel re-exports (`export { x } from './x'`) produces zero function candidates and is therefore invisible to the whole-file orphan check. It will not be falsely flagged, but it also cannot be detected as orphaned by this feature. Use your bundler's tree-shaking output or an import-graph tool for that.
 
 Use Cobweb's flags as a starting point for a code review, not as an automatic delete instruction.
 
