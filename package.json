@@ -2,9 +2,11 @@
   "name": "cobweb",
   "displayName": "Cobweb — Git-Based Dead Code Detector",
   "description": "Flags dead and stale functions using git history + static analysis. Supports 20 languages: TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C/C++, Swift, Kotlin, SQL, Vue, and more. No servers, no telemetry, 100% local.",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "publisher": "susheepks",
-  "extensionKind": ["workspace"],
+  "extensionKind": [
+    "workspace"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
